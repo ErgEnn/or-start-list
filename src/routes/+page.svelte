@@ -1,156 +1,155 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
+  import { invoke } from '@tauri-apps/api/core';
+  import AlphabetNav from '$lib/components/AlphabetNav.svelte';
+  import CompetitorsTable from '$lib/components/CompetitorsTable.svelte';
+  import SummaryPanel from '$lib/components/SummaryPanel.svelte';
 
-  let name = $state("");
-  let greetMsg = $state("");
+  interface RegistrationData {
+    id?: number;
+    competitor_first_name: string;
+    competitor_last_name: string;
+    club: string;
+    eol_number: string;
+    course_id: number;
+    course_name: string;
+    price: number;
+    timestamp: string;
+  }
 
-  async function greet(event: Event) {
-    event.preventDefault();
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsg = await invoke("greet", { name });
+  // Sample data for regular competitors
+  let regularCompetitors = $state([
+    { lastName: "Anderson", firstName: "John", club: "OK Võru", eolNumber: "12345" },
+    { lastName: "Bergman", firstName: "Anna", club: "SK Hiiu", eolNumber: "12346" },
+    { lastName: "Berg", firstName: "Marta", club: "OK Tartu", eolNumber: "12347" },
+    { lastName: "Chen", firstName: "Li", club: "SK Tallinn", eolNumber: "12348" },
+    { lastName: "Davis", firstName: "Sarah", club: "OK Võru", eolNumber: "12349" },
+    { lastName: "Evans", firstName: "Michael", club: "SK Pärnu", eolNumber: "12350" },
+    { lastName: "Fischer", firstName: "Emma", club: "OK Tartu", eolNumber: "12351" },
+    { lastName: "Garcia", firstName: "Carlos", club: "SK Hiiu", eolNumber: "12352" },
+    { lastName: "Hansen", firstName: "Erik", club: "OK Võru", eolNumber: "12353" },
+    { lastName: "Ivanov", firstName: "Dmitri", club: "SK Tallinn", eolNumber: "12354" },
+    { lastName: "Johnson", firstName: "Emily", club: "OK Tartu", eolNumber: "12355" },
+    { lastName: "Kumar", firstName: "Raj", club: "SK Pärnu", eolNumber: "12356" },
+    { lastName: "Lee", firstName: "Min", club: "OK Võru", eolNumber: "12357" },
+    { lastName: "Martinez", firstName: "Sofia", club: "SK Hiiu", eolNumber: "12358" },
+    { lastName: "Nielsen", firstName: "Lars", club: "OK Tartu", eolNumber: "12359" },
+  ]);
+
+  // Course options
+  let courses = [
+    { id: 1, name: "Course 1", price: 5 },
+    { id: 2, name: "Course 2", price: 7 },
+    { id: 3, name: "Course 3", price: 10 },
+    { id: 4, name: "Course 4", price: 12 },
+  ];
+
+  // Recent registrations
+  let recentRegistrations = $state<Array<{ name: string, course: string, price: number }>>([]);
+
+  // Load recent registrations on mount
+  async function loadRecentRegistrations() {
+    try {
+      const registrations = await invoke<RegistrationData[]>('get_recent_registrations', { limit: 10 });
+      recentRegistrations = registrations.map(r => ({
+        name: `${r.competitor_first_name} ${r.competitor_last_name}`,
+        course: r.course_name,
+        price: r.price
+      }));
+    } catch (error) {
+      console.error('Failed to load registrations:', error);
+    }
+  }
+
+  // Call on component mount
+  $effect(() => {
+    loadRecentRegistrations();
+  });
+
+  async function handleCourseSelect(competitor: any, courseId: number) {
+    const course = courses.find(c => c.id === courseId);
+    if (course) {
+      const registration: RegistrationData = {
+        competitor_first_name: competitor.firstName,
+        competitor_last_name: competitor.lastName,
+        club: competitor.club,
+        eol_number: competitor.eolNumber,
+        course_id: course.id,
+        course_name: course.name,
+        price: course.price,
+        timestamp: new Date().toISOString(),
+      };
+
+      try {
+        // Save to database
+        await invoke('save_registration', { registration });
+        
+        // Update UI
+        recentRegistrations = [
+          { name: `${competitor.firstName} ${competitor.lastName}`, course: course.name, price: course.price },
+          ...recentRegistrations
+        ].slice(0, 10);
+      } catch (error) {
+        console.error('Failed to save registration:', error);
+      }
+    }
   }
 </script>
 
-<main class="container">
-  <h1>Welcome to Tauri + Svelte</h1>
-
-  <div class="row">
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo vite" alt="Vite Logo" />
-    </a>
-    <a href="https://tauri.app" target="_blank">
-      <img src="/tauri.svg" class="logo tauri" alt="Tauri Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank">
-      <img src="/svelte.svg" class="logo svelte-kit" alt="SvelteKit Logo" />
-    </a>
+<div class="app-container">
+  <div class="main-row">
+    <AlphabetNav />
+    <CompetitorsTable 
+      competitors={regularCompetitors} 
+      courses={courses}
+      onCourseSelect={handleCourseSelect}
+    />
   </div>
-  <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
-
-  <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
-  </form>
-  <p>{greetMsg}</p>
-</main>
+  <SummaryPanel registrations={recentRegistrations} />
+</div>
 
 <style>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.svelte-kit:hover {
-  filter: drop-shadow(0 0 2em #ff3e00);
-}
-
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
+:global(body) {
   margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
+  padding: 0;
+  font-family: 'Georgia', 'Times New Roman', serif;
+  background-color: #e8dcc4;
+  overflow: hidden;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
+.app-container {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 1rem;
+  padding: 1rem;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
 }
 
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
+.main-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 1rem;
+  overflow: hidden;
 }
 
-.row {
-  display: flex;
-  justify-content: center;
+/* Scrollbar styling */
+:global(::-webkit-scrollbar) {
+  width: 10px;
+  height: 10px;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+:global(::-webkit-scrollbar-track) {
+  background: #f5f1e8;
+  border-radius: 2px;
 }
 
-a:hover {
-  color: #535bf2;
+:global(::-webkit-scrollbar-thumb) {
+  background: #b8a989;
+  border-radius: 2px;
 }
 
-h1 {
-  text-align: center;
+:global(::-webkit-scrollbar-thumb:hover) {
+  background: #9a8a6f;
 }
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
-
 </style>
