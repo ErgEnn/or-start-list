@@ -1,0 +1,23 @@
+{
+  "folders": [
+    {
+      "name": "apps",
+      "path": "apps"
+    },
+    {
+      "name": "packages",
+      "path": "packages"
+    },
+    {
+      "name": "docs",
+      "path": "docs"
+    }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.turbo": true,
+      "**/dist": true,
+      "**/node_modules": true
+    }
+  }
+}

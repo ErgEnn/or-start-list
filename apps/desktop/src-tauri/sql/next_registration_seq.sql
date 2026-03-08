@@ -1,0 +1,1 @@
+SELECT COALESCE(MAX(local_seq),0)+1 AS next_seq FROM registrations

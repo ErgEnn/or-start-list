@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "OR Start List Desktop",
+  "version": "0.1.0",
+  "identifier": "ee.or.startlist.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @or/desktop dev",
+    "beforeBuildCommand": "pnpm --filter @or/desktop build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "OR Start List",
+        "width": 1080,
+        "height": 1920,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}
+

@@ -1,0 +1,1 @@
+SELECT config_key, config_value FROM device_config

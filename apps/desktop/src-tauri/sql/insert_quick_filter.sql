@@ -1,0 +1,1 @@
+INSERT INTO quick_filters(filter_id,event_id,name,query_definition) VALUES(?,?,?,?)

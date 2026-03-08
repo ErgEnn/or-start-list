@@ -1,0 +1,1 @@
+INSERT INTO classes(class_id,event_id,name,short_name) VALUES(?,?,?,?)

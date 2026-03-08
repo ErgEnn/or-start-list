@@ -1,0 +1,1 @@
+SELECT device_id, event_id, last_pulled_version, last_pushed_seq_ack FROM sync_state WHERE singleton=1

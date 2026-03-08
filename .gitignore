@@ -1,0 +1,13 @@
+node_modules/
+.next/
+dist/
+coverage/
+.DS_Store
+*.log
+.env
+.env.local
+.turbo/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/.cargo/
+apps/desktop/src-tauri/*.db
+

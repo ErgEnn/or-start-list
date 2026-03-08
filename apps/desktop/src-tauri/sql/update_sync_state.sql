@@ -1,0 +1,1 @@
+UPDATE sync_state SET device_id=?, event_id=?, last_pulled_version=?, last_pushed_seq_ack=? WHERE singleton=1

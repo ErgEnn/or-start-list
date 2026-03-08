@@ -1,0 +1,1 @@
+UPDATE outbox SET status='synced' WHERE local_seq <= ?

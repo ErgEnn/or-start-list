@@ -1,0 +1,112 @@
+"use client";
+
+import { Button, Card, Form, Input, Space, message } from "antd";
+import { useParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { t } from "@/lib/i18n";
+
+type EventFormValues = {
+  name: string;
+  date: string;
+};
+
+type EventDetailPayload = {
+  event: {
+    eventId: string;
+    name: string;
+    startDate: string | null;
+  };
+};
+
+export default function EventBasicInfoPage() {
+  const params = useParams<{ eventId: string }>();
+  const router = useRouter();
+  const eventId = params.eventId;
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form] = Form.useForm<EventFormValues>();
+  const [apiMessage, contextHolder] = message.useMessage();
+
+  async function loadEvent() {
+    setLoading(true);
+    const response = await fetch(`/api/admin/events/${encodeURIComponent(eventId)}`, { cache: "no-store" });
+    if (!response.ok) {
+      apiMessage.error(t("events.detailLoadError"));
+      setLoading(false);
+      return;
+    }
+
+    const payload = (await response.json()) as EventDetailPayload;
+    form.setFieldsValue({
+      name: payload.event.name,
+      date: payload.event.startDate ?? "",
+    });
+    setLoading(false);
+  }
+
+  async function saveBasicInfo() {
+    try {
+      const values = await form.validateFields();
+      setSaving(true);
+
+      const response = await fetch(`/api/admin/events/${encodeURIComponent(eventId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(values),
+      });
+
+      if (!response.ok) {
+        apiMessage.error(t("events.updateError"));
+        setSaving(false);
+        return;
+      }
+
+      apiMessage.success(t("events.updateSuccess"));
+      await loadEvent();
+      router.refresh();
+      setSaving(false);
+    } catch {
+      apiMessage.error(t("events.createInvalid"));
+      setSaving(false);
+    }
+  }
+
+  useEffect(() => {
+    loadEvent();
+  }, [eventId]);
+
+  return (
+    <>
+      {contextHolder}
+      <Card loading={loading}>
+        <Space direction="vertical" style={{ width: "100%" }}>
+          <Form form={form} layout="vertical">
+            <Form.Item
+              label={t("events.createName")}
+              name="name"
+              rules={[{ required: true, message: t("events.createInvalid") }]}
+            >
+              <Input />
+            </Form.Item>
+            <Form.Item
+              label={t("events.createDate")}
+              name="date"
+              rules={[
+                { required: true, message: t("events.createInvalid") },
+                { pattern: /^\d{4}-\d{2}-\d{2}$/, message: t("events.createInvalid") },
+              ]}
+            >
+              <Input type="date" />
+            </Form.Item>
+          </Form>
+          <Space>
+            <Button onClick={() => router.push("/dashboard/events")}>{t("events.back")}</Button>
+            <Button type="primary" loading={saving} onClick={saveBasicInfo}>
+              {t("events.save")}
+            </Button>
+          </Space>
+        </Space>
+      </Card>
+    </>
+  );
+}

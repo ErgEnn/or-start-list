@@ -1,0 +1,1 @@
+SELECT course_id, class_id, name, price_cents FROM courses ORDER BY name ASC

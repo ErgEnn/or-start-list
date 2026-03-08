@@ -1,0 +1,1 @@
+INSERT INTO pricing_rules(pricing_rule_id,event_id,rule_name,payload) VALUES(?,?,?,?)

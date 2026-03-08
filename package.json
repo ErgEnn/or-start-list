@@ -1,0 +1,17 @@
+{
+  "name": "or-start-list",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.12.3",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:portal": "pnpm --filter @or/portal dev",
+    "dev:desktop": "pnpm --filter @or/desktop dev",
+    "db:push:portal": "pnpm --filter @or/portal db:push",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

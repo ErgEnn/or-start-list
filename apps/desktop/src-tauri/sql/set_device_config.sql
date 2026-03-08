@@ -1,0 +1,1 @@
+INSERT INTO device_config(config_key,config_value) VALUES(?,?) ON CONFLICT(config_key) DO UPDATE SET config_value=excluded.config_value

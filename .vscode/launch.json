@@ -1,0 +1,34 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Portal: Debug Server (Next.js)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm dev",
+      "cwd": "${workspaceFolder}/apps/portal"
+    },
+    {
+      "name": "Portal: Debug Client (Chrome)",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "url": "http://localhost:3000",
+      "webRoot": "${workspaceFolder}/apps/portal",
+      "sourceMaps": true
+    },
+    {
+      "name": "Portal: Debug Full Stack (Next.js + Chrome)",
+      "type": "node-terminal",
+      "request": "launch",
+      "command": "pnpm dev",
+      "cwd": "${workspaceFolder}/apps/portal",
+      "serverReadyAction": {
+        "action": "debugWithChrome",
+        "pattern": "- Local:\\s+(https?://.+)",
+        "uriFormat": "%s",
+        "webRoot": "${workspaceFolder}/apps/portal",
+        "killOnServerStop": true
+      }
+    }
+  ]
+}

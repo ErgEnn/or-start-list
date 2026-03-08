@@ -1,0 +1,1 @@
+INSERT INTO courses(course_id,class_id,name,price_cents) VALUES(?,?,?,?)

@@ -1,0 +1,1 @@
+INSERT INTO outbox(local_seq,item_type,payload,created_at,status) VALUES (?, 'registration_created', ?, datetime('now'), 'pending')

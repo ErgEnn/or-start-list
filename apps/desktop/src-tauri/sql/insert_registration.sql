@@ -1,0 +1,1 @@
+INSERT INTO registrations(registration_id,device_id,event_id,competitor_id,course_id,price_cents,created_at_device,local_seq) VALUES (?,?,?,?,?,?,?,?)

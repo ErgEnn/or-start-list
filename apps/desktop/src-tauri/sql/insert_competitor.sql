@@ -1,0 +1,1 @@
+INSERT INTO competitors(competitor_id,eol_number,first_name,last_name,club,event_id) VALUES(?,?,?,?,?,'')
