@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
@@ -13,6 +13,22 @@ function extractDeviceName(payload: unknown) {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
+function extractApiKey(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const value = (payload as { apiKey?: unknown }).apiKey;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function extractLastError(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const value = (payload as { lastError?: unknown }).lastError;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 export async function GET() {
   const session = await auth();
   const adminId = session?.user?.id;
@@ -23,27 +39,39 @@ export async function GET() {
   const provisionLogs = await db
     .select({ payload: auditLog.payload })
     .from(auditLog)
-    .where(and(eq(auditLog.action, "device_provisioned"), eq(auditLog.actorId, adminId)))
+    .where(eq(auditLog.action, "device_provisioned"))
     .orderBy(desc(auditLog.createdAt));
 
-  const deviceNames = Array.from(
-    new Set(provisionLogs.map((item) => extractDeviceName(item.payload)).filter((value): value is string => Boolean(value))),
-  );
-  if (deviceNames.length === 0) {
-    return NextResponse.json({ devices: [] }, { status: 200 });
+  const latestApiKeys = new Map<string, string | null>();
+  for (const item of provisionLogs) {
+    const deviceName = extractDeviceName(item.payload);
+    if (!deviceName || latestApiKeys.has(deviceName)) {
+      continue;
+    }
+    latestApiKeys.set(deviceName, extractApiKey(item.payload));
   }
 
   const rows = await db
     .select({
       id: devices.id,
-      assignedUserId: devices.assignedUserId,
+      apiKey: devices.apiKeyHash,
       status: devices.status,
       heartbeatStatus: devices.heartbeatStatus,
+      heartbeatMeta: devices.heartbeatMeta,
       lastSeenAt: devices.lastSeenAt,
     })
     .from(devices)
-    .where(inArray(devices.id, deviceNames))
+    .where(eq(devices.assignedUserId, adminId))
     .orderBy(asc(devices.id));
 
-  return NextResponse.json({ devices: rows }, { status: 200 });
+  return NextResponse.json({
+    devices: rows.map((row) => ({
+      id: row.id,
+      apiKey: latestApiKeys.get(row.id) ?? null,
+      status: row.status,
+      heartbeatStatus: row.heartbeatStatus,
+      lastError: extractLastError(row.heartbeatMeta),
+      lastSeenAt: row.lastSeenAt,
+    })),
+  }, { status: 200 });
 }

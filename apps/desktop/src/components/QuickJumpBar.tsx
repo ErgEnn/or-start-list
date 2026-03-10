@@ -1,14 +1,25 @@
 import { ToggleButton } from '@mui/material';
 import { SpacedToggleButtonGroup } from './SpacedToggleButtonGroup';
 
-export function QuickJumpBar() {
-  const letters = 'ABCDEFGHIJKLMNOPQRSŠZŽTUVWÕÄÖÜXY'.split('');
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSŠZŽTUVWÕÄÖÜXY'.split('');
+
+type QuickJumpBarProps = {
+  availableLetters: Set<string>;
+  selectedLetter: string | null;
+  onJump: (letter: string | null) => void;
+};
+
+export function QuickJumpBar({ availableLetters, selectedLetter, onJump }: QuickJumpBarProps) {
 
   return (
     <SpacedToggleButtonGroup
       fullWidth
       exclusive
       orientation='vertical'
+      value={selectedLetter}
+      onChange={(_event, nextLetter: string | null) => {
+        onJump(nextLetter);
+      }}
       sx={{
         gap: '0.25em',
         width: 'clamp(2.75rem, 4vw, 4rem)',
@@ -16,15 +27,17 @@ export function QuickJumpBar() {
         flexShrink: 0,
       }}
     >
-      {letters.map(letter => (
+      {LETTERS.map((letter) => (
         <ToggleButton
           key={letter}
           value={letter}
+          disabled={!availableLetters.has(letter)}
           sx={{
             flex: 1,
             minHeight: 0,
             padding: 0,
             fontWeight: 'bold',
+            fontSize: '1.25em',
           }}
         >
           {letter}
@@ -33,4 +46,3 @@ export function QuickJumpBar() {
     </SpacedToggleButtonGroup>
   );
 }
-

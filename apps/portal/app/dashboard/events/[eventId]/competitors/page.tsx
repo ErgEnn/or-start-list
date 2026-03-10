@@ -5,15 +5,22 @@ import Paragraph from "antd/es/typography/Paragraph";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { t } from "@/lib/i18n";
+import { formatEuro } from "@/lib/money";
 
 type EventCompetitorRow = {
-  competitorId: string;
-  eolNumber: string;
-  firstName: string;
-  lastName: string;
+  registrationId: string;
+  eolNumber: string | null;
+  firstName: string | null;
+  lastName: string | null;
   dob: string | null;
   club: string | null;
   siCard: string | null;
+  courseId: string;
+  competitionGroupName: string;
+  courseName: string | null;
+  pricePaid: number | null;
+  deviceId: string;
+  createdAtDevice: string;
 };
 
 type EventDetailPayload = {
@@ -58,19 +65,35 @@ export default function EventCompetitorsPage() {
           </Space>
           <Table
             loading={loading}
-            rowKey={(row) => row.competitorId}
+            rowKey={(row) => row.registrationId}
             dataSource={rows}
             pagination={{ pageSize: 25 }}
             locale={{ emptyText: t("events.competitorsEmpty") }}
-            scroll={{ x: 1100 }}
+            scroll={{ x: 1440 }}
             columns={[
-              { title: t("events.competitorId"), dataIndex: "competitorId", key: "competitorId", width: 180 },
               { title: t("events.eolNumber"), dataIndex: "eolNumber", key: "eolNumber", width: 140 },
               { title: t("events.firstName"), dataIndex: "firstName", key: "firstName", width: 160 },
               { title: t("events.lastName"), dataIndex: "lastName", key: "lastName", width: 160 },
               { title: t("events.dob"), dataIndex: "dob", key: "dob", width: 140 },
               { title: t("events.club"), dataIndex: "club", key: "club", width: 180 },
               { title: t("events.siCard"), dataIndex: "siCard", key: "siCard", width: 140 },
+              { title: "Competition Group", dataIndex: "competitionGroupName", key: "competitionGroupName", width: 180 },
+              { title: t("events.selectedCourse"), dataIndex: "courseName", key: "courseName", width: 180 },
+              {
+                title: t("events.pricePaid"),
+                dataIndex: "pricePaid",
+                key: "pricePaid",
+                width: 140,
+                render: (value: number | null) => formatEuro(value),
+              },
+              { title: t("events.deviceId"), dataIndex: "deviceId", key: "deviceId", width: 180 },
+              {
+                title: t("events.selectedAt"),
+                dataIndex: "createdAtDevice",
+                key: "createdAtDevice",
+                width: 220,
+                render: (value: string) => new Date(value).toLocaleString(),
+              },
             ]}
           />
         </Space>

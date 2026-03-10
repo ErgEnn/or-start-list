@@ -1,0 +1,129 @@
+import { asc } from "drizzle-orm";
+import type {
+  CompetitionGroupsResponse,
+  DeviceSyncCycleRequest,
+  DeviceSyncCycleResponse,
+  PaymentGroupsResponse,
+} from "@or/shared";
+import { competitionGroupsResponseSchema, paymentGroupsResponseSchema } from "@or/shared";
+import { getSourceCompetitorChanges } from "@/lib/source-competitors";
+import type { DbLike } from "./db";
+import { competitionGroups, events, paymentGroupCompetitors, paymentGroups } from "./db/schema";
+import { moneyFromDb } from "./money";
+import { applyOutboxItems, loadEventDataset } from "./sync";
+
+async function loadEventsSnapshot(client: DbLike) {
+  return client
+    .select({
+      eventId: events.eventId,
+      name: events.name,
+      startDate: events.startDate,
+    })
+    .from(events)
+    .orderBy(asc(events.startDate), asc(events.name));
+}
+
+async function loadPaymentGroupsSnapshot(client: DbLike): Promise<PaymentGroupsResponse["paymentGroups"]> {
+  const [groupRows, memberRows] = await Promise.all([
+    client
+      .select({
+        paymentGroupId: paymentGroups.paymentGroupId,
+        name: paymentGroups.name,
+        colorHex: paymentGroups.colorHex,
+        globalPriceOverrideCents: paymentGroups.globalPriceOverrideCents,
+      })
+      .from(paymentGroups)
+      .orderBy(asc(paymentGroups.name), asc(paymentGroups.paymentGroupId)),
+    client
+      .select({
+        paymentGroupId: paymentGroupCompetitors.paymentGroupId,
+        competitorId: paymentGroupCompetitors.competitorId,
+        priceOverrideCents: paymentGroupCompetitors.priceOverrideCents,
+      })
+      .from(paymentGroupCompetitors)
+      .orderBy(asc(paymentGroupCompetitors.paymentGroupId), asc(paymentGroupCompetitors.competitorId)),
+  ]);
+
+  const competitorIdsByGroup = new Map<string, string[]>();
+  const competitorsByGroup = new Map<string, Array<{ competitorId: string; priceOverrideCents: number | null }>>();
+  for (const row of memberRows) {
+    const current = competitorIdsByGroup.get(row.paymentGroupId) ?? [];
+    current.push(row.competitorId);
+    competitorIdsByGroup.set(row.paymentGroupId, current);
+
+    const competitorRows = competitorsByGroup.get(row.paymentGroupId) ?? [];
+    competitorRows.push({
+      competitorId: row.competitorId,
+      priceOverrideCents: moneyFromDb(row.priceOverrideCents),
+    });
+    competitorsByGroup.set(row.paymentGroupId, competitorRows);
+  }
+
+  return paymentGroupsResponseSchema.parse({
+    paymentGroups: groupRows.map((group: { paymentGroupId: string; name: string; colorHex: string | null; globalPriceOverrideCents: unknown }) => ({
+      paymentGroupId: group.paymentGroupId,
+      name: group.name,
+      colorHex: group.colorHex,
+      globalPriceOverrideCents: moneyFromDb(group.globalPriceOverrideCents),
+      competitorIds: competitorIdsByGroup.get(group.paymentGroupId) ?? [],
+      competitors: competitorsByGroup.get(group.paymentGroupId) ?? [],
+    })),
+  }).paymentGroups;
+}
+
+async function loadCompetitionGroupsSnapshot(client: DbLike): Promise<CompetitionGroupsResponse["competitionGroups"]> {
+  const rows = await client
+    .select({
+      name: competitionGroups.name,
+      gender: competitionGroups.gender,
+      minYear: competitionGroups.minYear,
+      maxYear: competitionGroups.maxYear,
+      price: competitionGroups.price,
+    })
+    .from(competitionGroups)
+    .orderBy(asc(competitionGroups.name));
+
+  return competitionGroupsResponseSchema.parse({
+    competitionGroups: rows.map((row: { name: string; gender: string | null; minYear: number | null; maxYear: number | null; price: unknown }) => ({
+      name: row.name,
+      gender: (row.gender as "male" | "female" | null) ?? null,
+      minYear: row.minYear,
+      maxYear: row.maxYear,
+      priceCents: Math.round((moneyFromDb(row.price) ?? 0) * 100),
+    })),
+  }).competitionGroups;
+}
+
+export async function loadDeviceCycle(
+  client: DbLike,
+  deviceId: string,
+  request: DeviceSyncCycleRequest,
+): Promise<DeviceSyncCycleResponse> {
+  const pushResult = await applyOutboxItems(client, deviceId, request.pendingRegistrations);
+  const [eventRows, paymentGroupRows, competitionGroupRows, competitorDelta] = await Promise.all([
+    loadEventsSnapshot(client),
+    loadPaymentGroupsSnapshot(client),
+    loadCompetitionGroupsSnapshot(client),
+    getSourceCompetitorChanges(request.sinceCompetitorVersion),
+  ]);
+
+  const eventSnapshots = [];
+  for (const event of eventRows) {
+    const clientVersion = request.eventVersions[event.eventId] ?? 0;
+    const dataset = await loadEventDataset(client, event.eventId, clientVersion);
+    if (dataset.mode === "snapshot" || dataset.version > clientVersion) {
+      eventSnapshots.push(dataset);
+    }
+  }
+
+  return {
+    ackSeqInclusive: pushResult.ackSeqInclusive,
+    acceptedCount: pushResult.acceptedCount,
+    rejected: pushResult.rejected,
+    events: eventRows,
+    paymentGroups: paymentGroupRows,
+    competitionGroups: competitionGroupRows,
+    competitorDelta,
+    eventSnapshots,
+  };
+}

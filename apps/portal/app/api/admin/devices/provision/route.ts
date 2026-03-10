@@ -54,14 +54,13 @@ export async function POST(request: NextRequest) {
       actorType: "admin_user",
       actorId: adminId,
       action: "device_provisioned",
-      payload: { deviceName, userId: adminId, adminName: session?.user?.name ?? null },
+      payload: { deviceName, apiKey, adminId, adminName: session?.user?.name ?? null },
     });
   });
 
   return NextResponse.json({
     ok: true,
     deviceName,
-    userId: adminId,
-    apiKey
+    apiKey,
   });
 }

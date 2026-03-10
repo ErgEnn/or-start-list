@@ -7,6 +7,7 @@ export type CompetitorRow = {
   eolNumber: string;
   firstName: string;
   lastName: string;
+  gender: "male" | "female" | null;
   dob: string | null;
   club: string | null;
   siCard: string | null;
@@ -16,7 +17,7 @@ const DB_NAME = "or-portal-admin-db";
 const STORE_NAME = "competitors";
 
 async function getDb() {
-  return openDB(DB_NAME, 2, {
+  return openDB(DB_NAME, 3, {
     upgrade(db) {
       if (db.objectStoreNames.contains(STORE_NAME)) {
         db.deleteObjectStore(STORE_NAME);

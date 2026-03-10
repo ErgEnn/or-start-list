@@ -47,8 +47,7 @@ export async function authenticateDevice(rawApiKey: string | null): Promise<Devi
   if (!apiKey) {
     return null;
   }
-  const apiKeyHash = hashApiKey(apiKey);
-  return findActiveDevice(and(eq(devices.apiKeyHash, apiKeyHash), eq(devices.status, "active")));
+  return findActiveDevice(and(eq(devices.apiKeyHash, hashApiKey(apiKey)), eq(devices.status, "active")));
 }
 
 export async function authenticateDeviceByName(rawDeviceName: string | null): Promise<DeviceAuth | null> {
@@ -61,5 +60,3 @@ export async function authenticateDeviceByName(rawDeviceName: string | null): Pr
   }
   return findActiveDevice(and(eq(devices.id, deviceName), eq(devices.status, "active")));
 }
-
-export const authenticateDeviceById = authenticateDeviceByName;

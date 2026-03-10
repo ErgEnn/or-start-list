@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { gunzipSync, inflateSync } from "node:zlib";
-import { asc, gt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, or, sql } from "drizzle-orm";
 import { XMLParser } from "fast-xml-parser";
 import { db, type DbLike } from "@/lib/db";
 import { sourceCompetitors } from "@/lib/db/schema";
@@ -18,6 +18,8 @@ type EolPerson = {
   PersonName?: EolPersonName;
   PersonId?: TextLike | EolTextNode;
   BirthDate?: { Date?: TextLike | EolTextNode } | TextLike | EolTextNode;
+  Sex?: TextLike | EolTextNode;
+  Gender?: TextLike | EolTextNode;
 };
 type EolCCard = {
   CCardId?: TextLike | EolTextNode | Array<TextLike | EolTextNode>;
@@ -42,6 +44,7 @@ export type SourceCompetitorRow = {
   eolNumber: string;
   firstName: string;
   lastName: string;
+  gender?: "male" | "female";
   dob?: string;
   club?: string;
   siCard?: string;
@@ -119,6 +122,25 @@ function normalizeDob(value: string | undefined): string | undefined {
   return value;
 }
 
+function normalizeGender(value: string | undefined): "male" | "female" | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  switch (value.trim().toLowerCase()) {
+    case "m":
+    case "male":
+    case "man":
+      return "male";
+    case "f":
+    case "female":
+    case "woman":
+      return "female";
+    default:
+      return undefined;
+  }
+}
+
 function toSourceCompetitor(node: EolCompetitor): SourceCompetitorRow | null {
   const personOrId = node.Person ?? node.PersonId;
   const person =
@@ -135,6 +157,10 @@ function toSourceCompetitor(node: EolCompetitor): SourceCompetitorRow | null {
   }
 
   const eolNumber = competitorId;
+  const gender =
+    normalizeGender(readText(person.Sex)) ??
+    normalizeGender(readText(person.Gender)) ??
+    undefined;
   const rawDob =
     readText((person.BirthDate as UnknownMap | undefined)?.Date) ??
     readText(person.BirthDate) ??
@@ -155,6 +181,7 @@ function toSourceCompetitor(node: EolCompetitor): SourceCompetitorRow | null {
     eolNumber,
     firstName,
     lastName,
+    gender,
     dob,
     club,
     siCard,
@@ -169,6 +196,7 @@ function hashCompetitor(row: SourceCompetitorRow): string {
         row.eolNumber,
         row.firstName,
         row.lastName,
+        row.gender ?? "",
         row.dob ?? "",
         row.club ?? "",
         row.siCard ?? "",
@@ -291,6 +319,7 @@ export async function upsertSourceCompetitorImport(
     eolNumber: row.eolNumber,
     firstName: row.firstName,
     lastName: row.lastName,
+    gender: row.gender ?? null,
     dob: row.dob ?? null,
     club: row.club ?? null,
     siCard: row.siCard ?? null,
@@ -312,6 +341,7 @@ export async function upsertSourceCompetitorImport(
             competitorId: sql`excluded.competitor_id`,
             firstName: sql`excluded.first_name`,
             lastName: sql`excluded.last_name`,
+            gender: sql`excluded.gender`,
             dob: sql`excluded.dob`,
             club: sql`excluded.club`,
             siCard: sql`excluded.si_card`,
@@ -338,11 +368,21 @@ export async function upsertSourceCompetitorImport(
   };
 }
 
-export async function getSourceCompetitorChanges(sinceRowVersion: number, limit?: number) {
+export async function getSourceCompetitorChanges(sinceRowVersion: number, limit?: number, afterCompetitorId = "") {
   const latestVersionResult = await db
     .select({ latestVersion: sql<number>`coalesce(max(${sourceCompetitors.version}), 0)` })
     .from(sourceCompetitors);
   const latestRowVersion = latestVersionResult[0]?.latestVersion ?? 0;
+
+  const cappedLimit = typeof limit === "number" ? Math.max(1, limit) : undefined;
+  const fetchLimit = typeof cappedLimit === "number" ? cappedLimit + 1 : undefined;
+
+  const whereClause = afterCompetitorId
+    ? or(
+        gt(sourceCompetitors.version, sinceRowVersion),
+        and(eq(sourceCompetitors.version, sinceRowVersion), gt(sourceCompetitors.competitorId, afterCompetitorId)),
+      )
+    : gt(sourceCompetitors.version, sinceRowVersion);
 
   const baseQuery = db
     .select({
@@ -351,41 +391,50 @@ export async function getSourceCompetitorChanges(sinceRowVersion: number, limit?
       eolNumber: sourceCompetitors.eolNumber,
       firstName: sourceCompetitors.firstName,
       lastName: sourceCompetitors.lastName,
+      gender: sourceCompetitors.gender,
       dob: sourceCompetitors.dob,
       club: sourceCompetitors.club,
       siCard: sourceCompetitors.siCard,
       changedAt: sourceCompetitors.updatedAt,
     })
     .from(sourceCompetitors)
-    .where(gt(sourceCompetitors.version, sinceRowVersion))
-    .orderBy(asc(sourceCompetitors.version));
+    .where(whereClause)
+    .orderBy(asc(sourceCompetitors.version), asc(sourceCompetitors.competitorId));
 
   const rows =
-    typeof limit === "number"
-      ? await baseQuery.limit(limit)
+    typeof fetchLimit === "number"
+      ? await baseQuery.limit(fetchLimit)
       : await baseQuery;
 
-  const changes = rows.map((row: any) => ({
+  const pageRows = typeof cappedLimit === "number" ? rows.slice(0, cappedLimit) : rows;
+  const hasMore = typeof cappedLimit === "number" ? rows.length > cappedLimit : false;
+
+  const changes = pageRows.map((row: any) => ({
     rowVersion: row.rowVersion as number,
     competitorId: row.competitorId as string,
     changeType: "upsert" as const,
-    competitor: {
-      competitorId: row.competitorId as string,
-      eolNumber: row.eolNumber as string,
-      firstName: row.firstName as string,
-      lastName: row.lastName as string,
-      dob: (row.dob as string | null) ?? undefined,
-      club: (row.club as string | null) ?? undefined,
-      siCard: (row.siCard as string | null) ?? undefined,
+      competitor: {
+        competitorId: row.competitorId as string,
+        eolNumber: row.eolNumber as string,
+        firstName: row.firstName as string,
+        lastName: row.lastName as string,
+        gender: (row.gender as "male" | "female" | null) ?? undefined,
+        dob: (row.dob as string | null) ?? undefined,
+        club: (row.club as string | null) ?? undefined,
+        siCard: (row.siCard as string | null) ?? undefined,
     },
     changedAt: (row.changedAt as Date).toISOString(),
   }));
-  const nextSinceRowVersion = changes.length > 0 ? changes[changes.length - 1].rowVersion : sinceRowVersion;
+  const lastChange = changes[changes.length - 1];
+  const nextSinceRowVersion = lastChange?.rowVersion ?? sinceRowVersion;
+  const nextAfterCompetitorId = lastChange?.competitorId ?? afterCompetitorId;
 
   return {
+    currentVersion: latestRowVersion,
     latestRowVersion,
     nextSinceRowVersion,
-    hasMore: nextSinceRowVersion < latestRowVersion,
+    nextAfterCompetitorId,
+    hasMore,
     changes,
   };
 }

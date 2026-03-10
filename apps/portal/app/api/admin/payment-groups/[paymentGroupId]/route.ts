@@ -12,6 +12,7 @@ type PaymentGroupCompetitorInput = {
 
 type UpdatePaymentGroupBody = {
   name?: unknown;
+  colorHex?: unknown;
   globalPriceOverrideCents?: unknown;
   competitors?: unknown;
 };
@@ -46,6 +47,23 @@ function normalizeCompetitors(value: unknown) {
   return normalized;
 }
 
+function normalizeColorHex(value: unknown) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return "invalid";
+  }
+
+  const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return /^#[0-9A-Fa-f]{6}$/.test(normalized) ? normalized.toUpperCase() : "invalid";
+}
+
 export async function PUT(request: NextRequest, context: { params: Promise<{ paymentGroupId: string }> }) {
   const unauthorized = await requireAdminSession();
   if (unauthorized) {
@@ -56,10 +74,11 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ pay
   const body = (await request.json()) as UpdatePaymentGroupBody;
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
+  const colorHex = normalizeColorHex(body.colorHex);
   const globalPriceOverrideCents = parseOptionalMoney(body.globalPriceOverrideCents);
   const competitors = normalizeCompetitors(body.competitors);
 
-  if (!name || globalPriceOverrideCents === "invalid" || competitors === null) {
+  if (!name || colorHex === "invalid" || globalPriceOverrideCents === "invalid" || competitors === null) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
@@ -78,6 +97,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ pay
       .update(paymentGroups)
       .set({
         name,
+        colorHex,
         globalPriceOverrideCents: globalPriceOverrideCents === null ? null : toMoneyDb(globalPriceOverrideCents),
         updatedAt: new Date(),
       })

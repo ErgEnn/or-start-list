@@ -143,6 +143,7 @@ export const registrations = pgTable(
       .references(() => events.eventId, { onDelete: "restrict" }),
     competitorId: text("competitor_id").notNull(),
     courseId: text("course_id").notNull(),
+    competitionGroupName: text("competition_group_name").notNull(),
     priceCents: numeric("price_cents", { precision: 10, scale: 2 }).notNull(),
     createdAtDevice: timestamp("created_at_device", { withTimezone: true }).notNull(),
     localSeq: integer("local_seq").notNull(),
@@ -189,6 +190,7 @@ export const sourceCompetitors = pgTable(
     eolNumber: text("eol_number").notNull(),
     firstName: text("first_name").notNull(),
     lastName: text("last_name").notNull(),
+    gender: text("gender"),
     dob: date("dob"),
     club: text("club"),
     siCard: text("si_card"),
@@ -240,6 +242,7 @@ export const paymentGroups = pgTable(
   {
     paymentGroupId: text("payment_group_id").primaryKey(),
     name: text("name").notNull(),
+    colorHex: text("color_hex"),
     globalPriceOverrideCents: numeric("global_price_override_cents", { precision: 10, scale: 2 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

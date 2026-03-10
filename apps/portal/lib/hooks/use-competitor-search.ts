@@ -15,6 +15,7 @@ const SEARCH_KEYS: Array<keyof CompetitorRow> = ["eolNumber", "firstName", "last
 type CompetitorChangePayload = {
   latestRowVersion: number;
   nextSinceRowVersion: number;
+  nextAfterCompetitorId: string;
   hasMore: boolean;
   changes: Array<{
     rowVersion: number;
@@ -24,6 +25,7 @@ type CompetitorChangePayload = {
       eolNumber: string;
       firstName: string;
       lastName: string;
+      gender?: "male" | "female" | null;
       dob?: string;
       club?: string;
       siCard?: string;
@@ -47,16 +49,20 @@ function normalizeRow(row: CompetitorChangePayload["changes"][number]["competito
     eolNumber: row.eolNumber,
     firstName: row.firstName,
     lastName: row.lastName,
+    gender: row.gender ?? null,
     dob: row.dob ?? null,
     club: row.club ?? null,
     siCard: row.siCard ?? null,
   };
 }
 
-async function fetchChanges(sinceRowVersion: number): Promise<CompetitorChangePayload> {
-  const response = await fetch(`/api/admin/competitors/changes?sinceRowVersion=${sinceRowVersion}`, {
+async function fetchChanges(sinceRowVersion: number, afterCompetitorId = ""): Promise<CompetitorChangePayload> {
+  const response = await fetch(
+    `/api/admin/competitors/changes?sinceRowVersion=${sinceRowVersion}&afterCompetitorId=${encodeURIComponent(afterCompetitorId)}`,
+    {
     cache: "no-store",
-  });
+    },
+  );
   if (!response.ok) {
     throw new Error(`Failed to load competitor changes (${response.status})`);
   }
@@ -65,11 +71,12 @@ async function fetchChanges(sinceRowVersion: number): Promise<CompetitorChangePa
 
 async function fetchAllFromVersionZero() {
   let since = 0;
+  let afterCompetitorId = "";
   let latestRowVersion = 0;
   const rowsById = new Map<string, CompetitorRow>();
 
   while (true) {
-    const payload = await fetchChanges(since);
+    const payload = await fetchChanges(since, afterCompetitorId);
     latestRowVersion = payload.latestRowVersion;
 
     for (const change of payload.changes) {
@@ -77,6 +84,7 @@ async function fetchAllFromVersionZero() {
     }
 
     since = payload.nextSinceRowVersion;
+    afterCompetitorId = payload.nextAfterCompetitorId;
     if (!payload.hasMore) {
       break;
     }

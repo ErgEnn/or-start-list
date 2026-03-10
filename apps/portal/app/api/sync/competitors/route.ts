@@ -1,3 +1,4 @@
+import { sourceCompetitorDeltaResponseSchema } from "@or/shared";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateDevice } from "@/lib/auth";
 import { getSourceCompetitorChanges } from "@/lib/source-competitors";
@@ -10,6 +11,7 @@ export async function GET(request: NextRequest) {
   }
 
   const sinceRowVersionRaw = request.nextUrl.searchParams.get("sinceRowVersion") ?? "0";
+  const afterCompetitorId = request.nextUrl.searchParams.get("afterCompetitorId") ?? "";
   const limitRaw = request.nextUrl.searchParams.get("limit") ?? "5000";
 
   const sinceRowVersion = Number.parseInt(sinceRowVersionRaw, 10);
@@ -18,6 +20,6 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid sinceRowVersion" }, { status: 400 });
   }
 
-  const payload = await getSourceCompetitorChanges(sinceRowVersion, limit);
-  return NextResponse.json(payload, { status: 200 });
+  const payload = await getSourceCompetitorChanges(sinceRowVersion, limit, afterCompetitorId);
+  return NextResponse.json(sourceCompetitorDeltaResponseSchema.parse(payload), { status: 200 });
 }

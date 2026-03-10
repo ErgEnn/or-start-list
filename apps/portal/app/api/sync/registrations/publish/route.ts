@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { authenticateDevice, authenticateDeviceByName } from "@/lib/auth";
+import { authenticateDevice } from "@/lib/auth";
 import { withTransaction } from "@/lib/db";
 import { publishedRegistrations } from "@/lib/db/schema";
 import { parseMoney, toMoneyDb } from "@/lib/money";
@@ -76,8 +76,7 @@ function readEntries(payload: unknown): RegistrationPublishEntry[] | null {
 
 export async function POST(request: NextRequest) {
   const apiKey = request.headers.get("x-device-key");
-  const deviceName = request.headers.get("x-device-name") ?? request.headers.get("x-device-id");
-  const auth = (await authenticateDevice(apiKey)) ?? (await authenticateDeviceByName(deviceName));
+  const auth = await authenticateDevice(apiKey);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

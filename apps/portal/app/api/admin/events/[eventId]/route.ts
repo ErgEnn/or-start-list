@@ -1,7 +1,8 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { competitors, events } from "@/lib/db/schema";
+import { competitors, courses, events, registrations, sourceCompetitors } from "@/lib/db/schema";
+import { moneyFromDb } from "@/lib/money";
 import { requireAdminSession } from "@/lib/session";
 
 type UpdateEventBody = {
@@ -51,22 +52,53 @@ export async function GET(_: NextRequest, context: { params: Promise<{ eventId: 
 
   const eventCompetitors = await db
     .select({
-      competitorId: competitors.competitorId,
-      eolNumber: competitors.eolNumber,
-      firstName: competitors.firstName,
-      lastName: competitors.lastName,
-      dob: competitors.dob,
-      club: competitors.club,
-      siCard: competitors.siCard,
+      registrationId: registrations.registrationId,
+      competitorId: registrations.competitorId,
+      eolNumber: sql<string | null>`coalesce(${sourceCompetitors.eolNumber}, ${competitors.eolNumber})`,
+      firstName: sql<string | null>`coalesce(${sourceCompetitors.firstName}, ${competitors.firstName})`,
+      lastName: sql<string | null>`coalesce(${sourceCompetitors.lastName}, ${competitors.lastName})`,
+      dob: sql<string | null>`coalesce(${sourceCompetitors.dob}, ${competitors.dob})`,
+      club: sql<string | null>`coalesce(${sourceCompetitors.club}, ${competitors.club})`,
+      siCard: sql<string | null>`coalesce(${sourceCompetitors.siCard}, ${competitors.siCard})`,
+      courseId: registrations.courseId,
+      competitionGroupName: registrations.competitionGroupName,
+      courseName: courses.name,
+      pricePaid: registrations.priceCents,
+      deviceId: registrations.deviceId,
+      createdAtDevice: registrations.createdAtDevice,
     })
-    .from(competitors)
-    .where(eq(competitors.eventId, eventId))
-    .orderBy(asc(competitors.lastName), asc(competitors.firstName));
+    .from(registrations)
+    .leftJoin(
+      competitors,
+      and(
+        eq(competitors.eventId, registrations.eventId),
+        eq(competitors.competitorId, registrations.competitorId),
+      ),
+    )
+    .leftJoin(sourceCompetitors, eq(sourceCompetitors.competitorId, registrations.competitorId))
+    .leftJoin(
+      courses,
+      and(
+        eq(courses.eventId, registrations.eventId),
+        eq(courses.courseId, registrations.courseId),
+      ),
+    )
+    .where(eq(registrations.eventId, eventId))
+    .orderBy(
+      desc(registrations.createdAtDevice),
+      asc(sql`coalesce(${sourceCompetitors.lastName}, ${competitors.lastName})`),
+      asc(sql`coalesce(${sourceCompetitors.firstName}, ${competitors.firstName})`),
+    );
+
+  const competitorRows = eventCompetitors.map((row) => ({
+    ...row,
+    pricePaid: moneyFromDb(row.pricePaid),
+  }));
 
   return NextResponse.json(
     {
       event,
-      competitors: eventCompetitors,
+      competitors: competitorRows,
     },
     { status: 200 },
   );

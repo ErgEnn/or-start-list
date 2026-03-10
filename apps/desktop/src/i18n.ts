@@ -1,3 +1,66 @@
-export function t(key: string) {
-  return key
+const translations: Record<string, string> = {
+  all: 'Kõik',
+  api_key: 'API võti',
+  cancel: 'Loobu',
+  class: 'Klass',
+  clear_search: 'Tühjenda otsing',
+  course: 'Rada',
+  eol_code: 'EOL kood',
+  event_none: 'Võistlusi pole',
+  event_select: 'Vali võistlus',
+  loading_events: 'Võistluste laadimine...',
+  failed_load_desktop_data: 'Töölauarakenduse andmete laadimine ebaõnnestus.',
+  failed_load_event_data: 'Võistluse andmete laadimine ebaõnnestus.',
+  failed_load_settings: 'Seadete laadimine ebaõnnestus.',
+  failed_save_competition_group_selection: 'Võistlusgrupi valiku salvestamine ebaõnnestus.',
+  failed_query_competitors: 'Võistlejate päring ebaõnnestus.',
+  failed_refresh_local_data_after_sync: 'Kohalike andmete värskendamine pärast sünkroonimist ebaõnnestus.',
+  failed_save_course_selection: 'Raja valiku salvestamine ebaõnnestus.',
+  failed_save_settings: 'Seadete salvestamine ebaõnnestus.',
+  first_name: 'Eesnimi',
+  indexed_count: '{{count}} indekseeritud',
+  last_name: 'Perenimi',
+  last_n: 'Viimased {{count}}',
+  last_sync: 'Viimane sünkroonimine: {{time}}',
+  loading_competitors: 'Võistlejate laadimine...',
+  loading_local_cache: 'Kohaliku vahemälu laadimine...',
+  loading_registrations: 'Registreerimiste laadimine...',
+  loading_settings: 'Seadete laadimine...',
+  never: 'Mitte kunagi',
+  no_competition_groups: 'Võistlusgruppe pole',
+  no_competitors_found: 'Võistlejaid ei leitud.',
+  no_registrations_for_selected_event: 'Valitud võistluse jaoks registreerimisi pole.',
+  open_settings: 'Ava seaded',
+  pending_count: '{{count}} ootel',
+  portal_url: 'Portaali URL',
+  price: 'Hind',
+  recent_registrations: 'Viimased registreerimised ({{count}})',
+  running_totals: 'Jooksvad summad',
+  save: 'Salvesta',
+  search: 'Otsi...',
+  settings: 'Seaded',
+  settings_locked_helper: 'See väli on pärast esmast salvestamist lukustatud.',
+  shown_count: '{{count}} näidatud',
+  si_code: 'SI kood',
+  status_idle: 'ootel',
+  status_offline: 'võrguta',
+  status_online: 'ühendatud',
+  status_syncing: 'sünkroonib',
+  text_size: 'Teksti suurus',
+  total_in_filters: '{{count}} filtrites',
+};
+
+export type TranslationKey = keyof typeof translations;
+type TranslationParams = Record<string, string | number>;
+
+export function t(key: TranslationKey, params?: TranslationParams) {
+  const template = translations[key];
+  if (!params) {
+    return template;
+  }
+
+  return Object.entries(params).reduce(
+    (message, [paramKey, value]) => message.replaceAll(`{{${paramKey}}}`, String(value)),
+    template,
+  );
 }

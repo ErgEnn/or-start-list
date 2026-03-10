@@ -1,5 +1,6 @@
 "use client";
 
+import { EyeInvisibleOutlined, EyeOutlined } from "@ant-design/icons";
 import { Alert, Button, Card, Input, Space, Statistic, Table } from "antd";
 import Paragraph from "antd/es/typography/Paragraph";
 import Text from "antd/es/typography/Text";
@@ -9,24 +10,28 @@ import { t } from "@/lib/i18n";
 
 type DeviceRow = {
   id: string;
-  assignedUserId: string;
+  apiKey: string | null;
   status: string;
   heartbeatStatus: string;
+  lastError: string | null;
   lastSeenAt: string | null;
 };
 
 type ProvisionResponse = {
   ok: boolean;
   deviceName: string;
-  userId: string;
   apiKey: string;
 };
+
+function maskApiKey(apiKey: string) {
+  return apiKey.replace(/./g, "*");
+}
 
 function formatDateTime(value: string | null) {
   if (!value) {
     return t("devices.never");
   }
-  return new Date(value).toLocaleString();
+  return new Date(value).toISOString();
 }
 
 export default function DevicesPage() {
@@ -35,6 +40,7 @@ export default function DevicesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deviceName, setDeviceName] = useState("");
   const [provisioned, setProvisioned] = useState<ProvisionResponse | null>(null);
+  const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
 
   async function loadDevices() {
     setLoading(true);
@@ -114,9 +120,6 @@ export default function DevicesPage() {
                 {t("devices.deviceName")}: <Text code>{provisioned.deviceName}</Text>
               </Text>
               <Text>
-                {t("devices.userId")}: <Text code>{provisioned.userId}</Text>
-              </Text>
-              <Text>
                 {t("devices.apiKey")}: <Text code>{provisioned.apiKey}</Text>
               </Text>
               <Button size="small" onClick={copyKey}>
@@ -136,9 +139,46 @@ export default function DevicesPage() {
           locale={{ emptyText: t("devices.empty") }}
           columns={[
             { title: t("devices.deviceName"), dataIndex: "id", key: "id", width: 220 },
-            { title: t("devices.userId"), dataIndex: "assignedUserId", key: "assignedUserId", width: 180 },
+            {
+              title: t("devices.apiKey"),
+              dataIndex: "apiKey",
+              key: "apiKey",
+              width: 220,
+              render: (value: string | null, row: DeviceRow) => {
+                if (!value) {
+                  return <Text type="secondary">{t("devices.apiKeyUnavailable")}</Text>;
+                }
+
+                const revealed = revealedKeys[row.id] ?? false;
+
+                return (
+                  <Space size="small">
+                    <Text code>{revealed ? value : maskApiKey(value)}</Text>
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={revealed ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                      onClick={() =>
+                        setRevealedKeys((current) => ({
+                          ...current,
+                          [row.id]: !revealed,
+                        }))
+                      }
+                    >
+                      {revealed ? t("devices.hideKey") : t("devices.showKey")}
+                    </Button>
+                  </Space>
+                );
+              },
+            },
             { title: t("devices.status"), dataIndex: "status", key: "status", width: 120 },
             { title: t("devices.health"), dataIndex: "heartbeatStatus", key: "heartbeatStatus", width: 180 },
+            {
+              title: t("devices.lastError"),
+              dataIndex: "lastError",
+              key: "lastError",
+              render: (value: string | null) => value ? <Text type="danger">{value}</Text> : <Text type="secondary">{t("devices.noError")}</Text>,
+            },
             {
               title: t("devices.lastHealthCheck"),
               dataIndex: "lastSeenAt",

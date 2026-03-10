@@ -1,4 +1,4 @@
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { competitors, sourceCompetitors } from "@/lib/db/schema";
@@ -16,6 +16,7 @@ export async function GET() {
       eolNumber: sourceCompetitors.eolNumber,
       firstName: sourceCompetitors.firstName,
       lastName: sourceCompetitors.lastName,
+      gender: sourceCompetitors.gender,
       dob: sourceCompetitors.dob,
       club: sourceCompetitors.club,
       siCard: sourceCompetitors.siCard,
@@ -30,6 +31,7 @@ export async function GET() {
       eolNumber: row.eolNumber,
       firstName: row.firstName,
       lastName: row.lastName,
+      gender: row.gender,
       dob: row.dob,
       club: row.club,
       siCard: row.siCard,
@@ -46,11 +48,13 @@ export async function GET() {
       eolNumber: competitors.eolNumber,
       firstName: competitors.firstName,
       lastName: competitors.lastName,
+      gender: sourceCompetitors.gender,
       dob: competitors.dob,
       club: competitors.club,
       siCard: competitors.siCard,
     })
     .from(competitors)
+    .leftJoin(sourceCompetitors, eq(sourceCompetitors.competitorId, competitors.competitorId))
     .orderBy(asc(competitors.lastName), asc(competitors.firstName));
 
   return NextResponse.json({ competitors: eventRows }, { status: 200 });

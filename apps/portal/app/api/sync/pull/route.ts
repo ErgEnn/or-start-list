@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { pullResponseSchema } from "@or/shared";
-import { authenticateDevice, authenticateDeviceByName } from "@/lib/auth";
+import { authenticateDevice } from "@/lib/auth";
 import { withTransaction } from "@/lib/db";
 import { loadEventDataset } from "@/lib/sync";
 
 export async function GET(request: NextRequest) {
   const apiKey = request.headers.get("x-device-key");
-  const deviceName = request.headers.get("x-device-name") ?? request.headers.get("x-device-id");
-  const auth = (await authenticateDevice(apiKey)) ?? (await authenticateDeviceByName(deviceName));
+  const auth = await authenticateDevice(apiKey);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

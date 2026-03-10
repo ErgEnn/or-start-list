@@ -1,7 +1,16 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { OutboxItem, PullResponse } from "@or/shared";
 import type { DbLike } from "./db";
-import { classes, competitors, courses, eventSnapshotVersions, pricingRules, quickFilters, registrations } from "./db/schema";
+import {
+  classes,
+  competitors,
+  courses,
+  eventSnapshotVersions,
+  events,
+  pricingRules,
+  quickFilters,
+  registrations,
+} from "./db/schema";
 import { moneyFromDb, toMoneyDb } from "./money";
 
 export async function applyOutboxItems(client: DbLike, deviceId: string, items: OutboxItem[]) {
@@ -10,30 +19,40 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
   const rejected: Array<{ localSeq: number; code: string }> = [];
 
   for (const item of items) {
-    if (item.type !== "registration_created") {
-      rejected.push({ localSeq: item.localSeq, code: "UNSUPPORTED_ITEM_TYPE" });
+    if (item.type === "registration_created") {
+      const payload = item.payload;
+      const inserted = await client
+        .insert(registrations)
+        .values({
+          registrationId: payload.registrationId,
+          deviceId,
+          eventId: payload.eventId,
+          competitorId: payload.competitorId,
+          courseId: payload.courseId,
+          competitionGroupName: payload.competitionGroupName,
+          priceCents: toMoneyDb(payload.priceCents / 100),
+          createdAtDevice: new Date(payload.createdAtDevice),
+          localSeq: payload.localSeq,
+        })
+        .onConflictDoNothing({ target: [registrations.deviceId, registrations.localSeq] })
+        .returning({ id: registrations.registrationId });
+
+      if (inserted.length > 0) {
+        acceptedCount += 1;
+      }
+      ackSeqInclusive = Math.max(ackSeqInclusive, payload.localSeq);
       continue;
     }
-    const payload = item.payload;
-    const inserted = await client
-      .insert(registrations)
-      .values({
-        registrationId: payload.registrationId,
-        deviceId,
-        eventId: payload.eventId,
-        competitorId: payload.competitorId,
-        courseId: payload.courseId,
-        priceCents: toMoneyDb(payload.priceCents / 100),
-        createdAtDevice: new Date(payload.createdAtDevice),
-        localSeq: payload.localSeq,
-      })
-      .onConflictDoNothing({ target: [registrations.deviceId, registrations.localSeq] })
-      .returning({ id: registrations.registrationId });
 
-    if (inserted.length > 0) {
+    if (item.type === "registration_cleared") {
+      const payload = item.payload;
+      await client
+        .delete(registrations)
+        .where(and(eq(registrations.eventId, payload.eventId), eq(registrations.competitorId, payload.competitorId)));
       acceptedCount += 1;
+      ackSeqInclusive = Math.max(ackSeqInclusive, payload.localSeq);
+      continue;
     }
-    ackSeqInclusive = Math.max(ackSeqInclusive, payload.localSeq);
   }
 
   return { acceptedCount, ackSeqInclusive, rejected };
@@ -51,7 +70,16 @@ export async function loadEventDataset(
   const version = versionResult[0]?.version ?? 0;
   const mode = sinceVersion >= version && version > 0 ? "delta" : "snapshot";
 
-  const [competitorRows, classRows, courseRows, filterRows, pricingRows] = await Promise.all([
+  const [eventRows, competitorRows, classRows, courseRows, filterRows, pricingRows, registrationRows] = await Promise.all([
+    client
+      .select({
+        eventId: events.eventId,
+        name: events.name,
+        startDate: events.startDate,
+      })
+      .from(events)
+      .where(eq(events.eventId, eventId))
+      .limit(1),
     client
       .select({
         competitorId: competitors.competitorId,
@@ -106,12 +134,28 @@ export async function loadEventDataset(
       .from(pricingRules)
       .where(eq(pricingRules.eventId, eventId))
       .orderBy(asc(pricingRules.ruleName)),
+    client
+      .select({
+        registrationId: registrations.registrationId,
+        deviceId: registrations.deviceId,
+        eventId: registrations.eventId,
+        competitorId: registrations.competitorId,
+        courseId: registrations.courseId,
+        competitionGroupName: registrations.competitionGroupName,
+        priceCents: registrations.priceCents,
+        createdAtDevice: registrations.createdAtDevice,
+        localSeq: registrations.localSeq,
+      })
+      .from(registrations)
+      .where(eq(registrations.eventId, eventId))
+      .orderBy(desc(registrations.createdAtDevice), desc(registrations.receivedAt)),
   ]);
 
   return {
     version,
     mode,
     data: {
+      event: eventRows[0],
       competitors: competitorRows.map((item: any) => ({
         ...item,
         dob: item.dob ?? undefined,
@@ -127,6 +171,12 @@ export async function loadEventDataset(
       pricing: pricingRows.map((item: any) => ({
         ...item,
         payload: (item.payload ?? {}) as Record<string, unknown>,
+      })),
+      registrations: registrationRows.map((item: any) => ({
+        ...item,
+        competitionGroupName: item.competitionGroupName,
+        priceCents: Math.round((moneyFromDb(item.priceCents) ?? 0) * 100),
+        createdAtDevice: new Date(item.createdAtDevice).toISOString(),
       })),
     },
   };

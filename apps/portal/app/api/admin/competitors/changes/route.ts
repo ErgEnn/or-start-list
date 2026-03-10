@@ -9,12 +9,13 @@ export async function GET(request: NextRequest) {
   }
 
   const sinceRowVersionRaw = request.nextUrl.searchParams.get("sinceRowVersion") ?? "0";
+  const afterCompetitorId = request.nextUrl.searchParams.get("afterCompetitorId") ?? "";
   const sinceRowVersion = Number.parseInt(sinceRowVersionRaw, 10);
 
   if (Number.isNaN(sinceRowVersion) || sinceRowVersion < 0) {
     return NextResponse.json({ error: "Invalid sinceRowVersion" }, { status: 400 });
   }
 
-  const payload = await getSourceCompetitorChanges(sinceRowVersion);
+  const payload = await getSourceCompetitorChanges(sinceRowVersion, undefined, afterCompetitorId);
   return NextResponse.json(payload, { status: 200 });
 }

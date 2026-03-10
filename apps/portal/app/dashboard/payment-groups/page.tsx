@@ -22,6 +22,7 @@ type PaymentGroupCompetitor = {
 type PaymentGroupRow = {
   paymentGroupId: string;
   name: string;
+  colorHex: string | null;
   globalPriceOverrideCents: number | null;
   competitorsCount: number;
   competitors: PaymentGroupCompetitor[];
@@ -52,6 +53,7 @@ export default function PaymentGroupsPage() {
   const [saving, setSaving] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupName, setGroupName] = useState("");
+  const [colorHex, setColorHex] = useState("");
   const [globalPriceOverrideCents, setGlobalPriceOverrideCents] = useState<number | null>(null);
   const [selectedMembers, setSelectedMembers] = useState<EditableMember[]>([]);
 
@@ -81,6 +83,7 @@ export default function PaymentGroupsPage() {
   function openCreateModal() {
     setEditingGroupId(null);
     setGroupName("");
+    setColorHex("");
     setGlobalPriceOverrideCents(null);
     setSelectedMembers([]);
     setSearchInput("");
@@ -90,6 +93,7 @@ export default function PaymentGroupsPage() {
   function openEditModal(group: PaymentGroupRow) {
     setEditingGroupId(group.paymentGroupId);
     setGroupName(group.name);
+    setColorHex(group.colorHex ?? "");
     setGlobalPriceOverrideCents(group.globalPriceOverrideCents);
     setSelectedMembers(
       group.competitors.map((member) => ({
@@ -150,6 +154,7 @@ export default function PaymentGroupsPage() {
     try {
       const payload = {
         name,
+        colorHex: colorHex.trim() || null,
         globalPriceOverrideCents,
         competitors: selectedMembers.map((member) => ({
           competitorId: member.competitorId,
@@ -194,6 +199,30 @@ export default function PaymentGroupsPage() {
 
   const groupsColumns: ColumnsType<PaymentGroupRow> = [
     { title: t("paymentGroups.name"), dataIndex: "name", key: "name" },
+    {
+      title: t("paymentGroups.color"),
+      dataIndex: "colorHex",
+      key: "colorHex",
+      width: 150,
+      render: (value: string | null) =>
+        value ? (
+          <Space size={8}>
+            <span
+              style={{
+                width: 16,
+                height: 16,
+                borderRadius: 4,
+                border: "1px solid #d9d9d9",
+                backgroundColor: value,
+                display: "inline-block",
+              }}
+            />
+            {value}
+          </Space>
+        ) : (
+          "-"
+        ),
+    },
     {
       title: t("paymentGroups.globalPriceOverride"),
       dataIndex: "globalPriceOverrideCents",
@@ -323,6 +352,14 @@ export default function PaymentGroupsPage() {
               onChange={(event) => setGroupName(event.target.value)}
               placeholder={t("paymentGroups.name")}
               style={{ width: 280 }}
+            />
+            <Input
+              value={colorHex}
+              onChange={(event) => setColorHex(event.target.value.toUpperCase())}
+              placeholder={t("paymentGroups.color")}
+              style={{ width: 180 }}
+              maxLength={7}
+              allowClear
             />
             <InputNumber
               value={globalPriceOverrideCents}
