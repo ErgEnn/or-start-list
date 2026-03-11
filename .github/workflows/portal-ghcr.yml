@@ -7,11 +7,6 @@ on:
       - main
     paths:
       - "apps/portal/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - ".dockerignore"
       - ".github/workflows/portal-ghcr.yml"
 
 permissions:
