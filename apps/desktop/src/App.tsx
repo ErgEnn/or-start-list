@@ -7,12 +7,14 @@ import { SearchBar } from './components/SearchBar';
 import { Column } from './components/Column';
 import { FilterBar } from './components/FilterBar';
 import { SettingsButton } from './components/SettingsButton';
+import { AddCompetitorButton } from './components/AddCompetitorButton';
 import { RecentsList } from './components/RecentsList';
 import { StatusBar } from './components/StatusBar';
 import { TitleBar } from './components/TitleBar';
 import { EventSelectionDialog } from './components/EventSelectionDialog';
 import { useCompetitorDirectory } from './hooks/useCompetitorDirectory';
 import { DEFAULT_TEXT_SCALE, loadDeviceConfig, type DeviceConfig } from './lib/device-config';
+import type { DesktopCreateRegistrationResponse } from '@or/shared';
 
 function getJumpLetter(lastName: string) {
   return lastName.trim().charAt(0).toLocaleUpperCase();
@@ -46,6 +48,7 @@ export function App() {
     selectedEventId,
     setSelectedEventId,
     courses,
+    competitionGroups,
     selectedCoursesByCompetitor,
     submittingCompetitorIds,
     selectCompetitionGroupForCompetitor,
@@ -117,9 +120,11 @@ export function App() {
       return;
     }
 
-    setEventDialogOpen(true);
+    if (events.length > 0) {
+      setEventDialogOpen(true);
+    }
     setInitialEventPromptHandled(true);
-  }, [initialEventPromptHandled, loading]);
+  }, [initialEventPromptHandled, loading, events.length]);
 
   const scrollTarget =
     focusedCompetitor ??
@@ -153,6 +158,10 @@ export function App() {
     setTextScale(savedTextScale);
   }
 
+  function handleCompetitorClaimed(_response: DesktopCreateRegistrationResponse) {
+    setDeviceConfigRevision((current) => current + 1);
+  }
+
   function handleSelectEvent(eventId: string) {
     setSelectedEventId(eventId);
     setEventDialogOpen(false);
@@ -182,6 +191,12 @@ export function App() {
           onSaved={handleSettingsSaved}
           onTextScalePreview={handleTextScalePreview}
           onCancel={handleSettingsCancel}
+        />
+        <AddCompetitorButton
+          courses={courses}
+          competitionGroups={competitionGroups}
+          selectedEventId={selectedEventId}
+          onClaimed={handleCompetitorClaimed}
         />
         <SearchBar value={searchInput} onChange={setSearchInput} />
       </Row>

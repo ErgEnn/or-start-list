@@ -282,15 +282,17 @@ export default function PaymentGroupsPage() {
       key: "priceOverrideCents",
       width: 230,
       render: (_, row) => (
-        <InputNumber
-          value={row.priceOverrideCents}
-          min={0}
-          precision={2}
-          addonBefore="\u20ac"
-          style={{ width: "100%" }}
-          onChange={(value) => updateMemberPriceOverride(row.competitorId, typeof value === "number" ? value : null)}
-          placeholder="-"
-        />
+        <Space.Compact style={{ width: "100%" }}>
+          <Input style={{ width: 40, pointerEvents: "none", textAlign: "center" }} value="€" readOnly tabIndex={-1} />
+          <InputNumber
+            value={row.priceOverrideCents}
+            min={0}
+            precision={2}
+            style={{ width: "100%" }}
+            onChange={(value) => updateMemberPriceOverride(row.competitorId, typeof value === "number" ? value : null)}
+            placeholder="-"
+          />
+        </Space.Compact>
       ),
     },
     {
@@ -361,15 +363,17 @@ export default function PaymentGroupsPage() {
               maxLength={7}
               allowClear
             />
-            <InputNumber
-              value={globalPriceOverrideCents}
-              min={0}
-              precision={2}
-              addonBefore="\u20ac"
-              onChange={(value) => setGlobalPriceOverrideCents(typeof value === "number" ? value : null)}
-              placeholder={t("paymentGroups.globalPriceOverride")}
-              style={{ width: 280 }}
-            />
+            <Space.Compact>
+              <Input style={{ width: 40, pointerEvents: "none", textAlign: "center" }} value="€" readOnly tabIndex={-1} />
+              <InputNumber
+                value={globalPriceOverrideCents}
+                min={0}
+                precision={2}
+                onChange={(value) => setGlobalPriceOverrideCents(typeof value === "number" ? value : null)}
+                placeholder={t("paymentGroups.globalPriceOverride")}
+                style={{ width: 240 }}
+              />
+            </Space.Compact>
           </Space>
 
           <Card size="small" title={t("paymentGroups.selectedCompetitors")}>

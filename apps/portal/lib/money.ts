@@ -66,5 +66,5 @@ export function formatEuro(value: number | null | undefined): string {
   if (value === null || value === undefined) {
     return "-";
   }
-  return `\u20ac${normalizeMoney(value).toFixed(MAX_FRACTION_DIGITS)}`;
+  return `€${normalizeMoney(value).toFixed(MAX_FRACTION_DIGITS)}`;
 }

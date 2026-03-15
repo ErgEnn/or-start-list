@@ -115,12 +115,18 @@ CREATE TABLE IF NOT EXISTS sync_meta (
   last_competitor_version INTEGER NOT NULL DEFAULT 0,
   last_successful_sync_at TEXT,
   last_sync_error TEXT,
+  last_sync_error_detail TEXT,
   worker_status TEXT NOT NULL DEFAULT 'idle'
 );
 
 CREATE TABLE IF NOT EXISTS device_config (
   config_key TEXT PRIMARY KEY,
   config_value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS reserved_codes (
+  code TEXT PRIMARY KEY,
+  is_reserved INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS competition_group_selections (

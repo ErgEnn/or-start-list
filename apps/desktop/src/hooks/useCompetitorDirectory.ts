@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useRef, useState } from "react";
 import type {
+  CompetitionGroup,
   Course,
   DesktopRecentRegistration,
   DesktopSyncStatus,
@@ -25,6 +26,7 @@ type UseCompetitorDirectoryResult = {
   groupedCount: number;
   indexedCount: number;
   paymentGroups: PaymentGroup[];
+  competitionGroups: CompetitionGroup[];
   selectedFilter: string;
   setSelectedFilter: (filterId: string) => void;
   searchInput: string;
@@ -57,6 +59,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
   const [groupedCount, setGroupedCount] = useState(0);
   const [indexedCount, setIndexedCount] = useState(0);
   const [paymentGroups, setPaymentGroups] = useState<PaymentGroup[]>([]);
+  const [competitionGroups, setCompetitionGroups] = useState<CompetitionGroup[]>([]);
   const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER_ID);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -263,6 +266,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
 
         setEvents(bootstrap.events);
         setPaymentGroups(bootstrap.paymentGroups);
+        setCompetitionGroups(bootstrap.competitionGroups);
         setSyncStatus(bootstrap.syncStatus);
         applyEventState(bootstrap.eventState);
         await refreshQuery(latestFilterRef.current, latestSearchQueryRef.current);
@@ -302,6 +306,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
 
         setEvents(bootstrap.events);
         setPaymentGroups(bootstrap.paymentGroups);
+        setCompetitionGroups(bootstrap.competitionGroups);
         applyEventState(bootstrap.eventState);
         await refreshQuery(latestFilterRef.current, latestSearchQueryRef.current);
         setLastHydratedSyncAt(bootstrap.syncStatus.lastSuccessfulSyncAt);
@@ -384,6 +389,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     groupedCount,
     indexedCount,
     paymentGroups,
+    competitionGroups,
     selectedFilter,
     setSelectedFilter,
     searchInput,

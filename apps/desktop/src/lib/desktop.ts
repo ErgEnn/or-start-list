@@ -1,5 +1,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { z } from "zod";
 import {
   desktopBootstrapSchema,
   desktopClearRegistrationResponseSchema,
@@ -8,7 +9,9 @@ import {
   desktopQueryCompetitorsResponseSchema,
   desktopSetCompetitionGroupRequestSchema,
   desktopSyncStatusSchema,
+  reservedCodeSchema,
   type DesktopBootstrap,
+  type DesktopClaimReservedCodeRequest,
   type DesktopClearRegistrationRequest,
   type DesktopClearRegistrationResponse,
   type DesktopCreateRegistrationRequest,
@@ -18,6 +21,7 @@ import {
   type DesktopQueryCompetitorsResponse,
   type DesktopSetCompetitionGroupRequest,
   type DesktopSyncStatus,
+  type ReservedCode,
 } from "@or/shared";
 
 const SYNC_STATUS_EVENT = "desktop://sync-status";
@@ -61,8 +65,24 @@ export async function desktopSetCompetitionGroup(
   await invoke("desktop_set_competition_group", { request });
 }
 
+export async function desktopGetReservedCodes(): Promise<ReservedCode[]> {
+  return z.array(reservedCodeSchema).parse(await invoke("desktop_get_reserved_codes"));
+}
+
+export async function desktopClaimReservedCode(
+  request: DesktopClaimReservedCodeRequest,
+): Promise<DesktopCreateRegistrationResponse> {
+  return desktopCreateRegistrationResponseSchema.parse(
+    await invoke("desktop_claim_reserved_code", { request }),
+  );
+}
+
 export async function desktopGetSyncStatus(): Promise<DesktopSyncStatus> {
   return desktopSyncStatusSchema.parse(await invoke("desktop_get_sync_status"));
+}
+
+export async function desktopForceSync(): Promise<void> {
+  await invoke("desktop_force_sync");
 }
 
 export async function onDesktopSyncStatus(

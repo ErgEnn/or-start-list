@@ -3,16 +3,17 @@ use std::collections::HashMap;
 use tauri::{AppHandle, State};
 
 use crate::database::{
-    clear_registration, conn, create_registration, emit_sync_status, ensure_selected_event_id, init_schema,
-    load_competition_groups, load_device_config_map, load_event_state, load_events, load_payment_groups,
+    claim_reserved_code, clear_registration, conn, create_registration, emit_sync_status,
+    ensure_selected_event_id, init_schema, load_available_reserved_codes, load_competition_groups,
+    load_device_config_map, load_event_state, load_events, load_payment_groups,
     load_sync_status_from_db, query_competitors, refresh_in_memory_sync_status,
     save_competition_group_selection, upsert_device_config_value, AppState,
 };
 use crate::models::{
-    DesktopBootstrapResponse, DesktopClearRegistrationRequest, DesktopCreateRegistrationRequest,
-    DesktopCreateRegistrationResponse, DesktopEventState, DesktopQueryCompetitorsRequest,
-    DesktopQueryCompetitorsResponse, DesktopSetCompetitionGroupRequest, DesktopSyncStatus,
-    SELECTED_EVENT_KEY,
+    DesktopBootstrapResponse, DesktopClaimReservedCodeRequest, DesktopClearRegistrationRequest,
+    DesktopCreateRegistrationRequest, DesktopCreateRegistrationResponse, DesktopEventState,
+    DesktopQueryCompetitorsRequest, DesktopQueryCompetitorsResponse,
+    DesktopSetCompetitionGroupRequest, DesktopSyncStatus, ReservedCodePayload, SELECTED_EVENT_KEY,
 };
 
 #[tauri::command]
@@ -111,6 +112,36 @@ pub fn desktop_clear_registration(
 }
 
 #[tauri::command]
+pub fn desktop_get_reserved_codes(state: State<AppState>) -> Result<Vec<ReservedCodePayload>, String> {
+    let mut db = conn(&state)?;
+    load_available_reserved_codes(&mut db)
+}
+
+#[tauri::command]
+pub async fn desktop_claim_reserved_code(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: DesktopClaimReservedCodeRequest,
+) -> Result<DesktopCreateRegistrationResponse, String> {
+    let mut db = conn(&state)?;
+    let response = claim_reserved_code(&mut db, request)?;
+    let status = load_sync_status_from_db(&mut db)?;
+    emit_sync_status(&app, status)?;
+    tauri::async_runtime::spawn({
+        let app_handle = app.clone();
+        async move {
+            let _ = crate::sync::run_sync_cycle(&app_handle).await;
+        }
+    });
+    Ok(response)
+}
+
+#[tauri::command]
 pub fn desktop_get_sync_status(app: AppHandle) -> Result<DesktopSyncStatus, String> {
     refresh_in_memory_sync_status(&app)
+}
+
+#[tauri::command]
+pub async fn desktop_force_sync(app: AppHandle) -> Result<(), String> {
+    crate::sync::run_sync_cycle(&app).await
 }

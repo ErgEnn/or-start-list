@@ -257,6 +257,21 @@ pub fn apply_cycle_response(
             .execute(connection)?;
         }
 
+        // Apply reserved codes snapshot, preserving locally-claimed codes still pending in outbox
+        sql_query(
+            "DELETE FROM reserved_codes WHERE code NOT IN ( \
+               SELECT json_extract(payload, '$.code') FROM outbox \
+               WHERE item_type = 'reserved_code_claimed' AND status = 'pending' \
+             )",
+        )
+        .execute(connection)?;
+        for code in &payload.reserved_codes {
+            sql_query("INSERT OR IGNORE INTO reserved_codes(code, is_reserved) VALUES (?, ?)")
+                .bind::<Text, _>(&code.code)
+                .bind::<BigInt, _>(if code.is_reserved { 1i64 } else { 0i64 })
+                .execute(connection)?;
+        }
+
         for change in &payload.competitor_delta.changes {
             if change.change_type == "delete" {
                 sql_query("DELETE FROM source_competitors WHERE competitor_id = ?")
@@ -332,6 +347,7 @@ pub async fn run_sync_cycle(app: &AppHandle) -> Result<(), String> {
         let status = update_sync_error(
             &mut db,
             "Missing portalBaseUrl or apiKey in local device config.",
+            None,
         )?;
         emit_sync_status(app, status)?;
         warn!("Skipping sync cycle because device config is incomplete");
@@ -366,7 +382,11 @@ pub async fn run_sync_cycle(app: &AppHandle) -> Result<(), String> {
             .unwrap_or_else(|error| format!("<failed to read response body: {error}>"));
         let mut db = conn_from_app(app)?;
         let error_message = format!("Sync failed with status {}", status_code);
-        let status = update_sync_error(&mut db, &error_message)?;
+        let error_detail = format!(
+            "POST {}\n\nRequest body:\n{}\n\nResponse body:\n{}",
+            sync_url, request_body, response_body
+        );
+        let status = update_sync_error(&mut db, &error_message, Some(&error_detail))?;
         emit_sync_status(app, status)?;
         report_device_heartbeat(
             &client,
@@ -392,9 +412,13 @@ pub async fn run_sync_cycle(app: &AppHandle) -> Result<(), String> {
                 "Sync response JSON parse failed: url={}, error={}, response_body={}",
                 sync_url, error, response_body
             );
-            let error_message = error.to_string();
+            let error_message = format!("JSON parse error: {}", error);
+            let error_detail = format!(
+                "POST {}\n\nResponse body:\n{}",
+                sync_url, response_body
+            );
             let mut db = conn_from_app(app)?;
-            let status = update_sync_error(&mut db, &error_message)?;
+            let status = update_sync_error(&mut db, &error_message, Some(&error_detail))?;
             emit_sync_status(app, status)?;
             report_device_heartbeat(
                 &client,
@@ -410,7 +434,7 @@ pub async fn run_sync_cycle(app: &AppHandle) -> Result<(), String> {
     };
     let mut db = conn_from_app(app)?;
     if let Err(error_message) = apply_cycle_response(&mut db, &payload) {
-        let status = update_sync_error(&mut db, &error_message)?;
+        let status = update_sync_error(&mut db, &error_message, None)?;
         emit_sync_status(app, status)?;
         report_device_heartbeat(
             &client,
@@ -594,6 +618,7 @@ mod tests {
                     }],
                 },
             }],
+            reserved_codes: Vec::new(),
         };
 
         apply_cycle_response(&mut db, &payload).expect("apply cycle");

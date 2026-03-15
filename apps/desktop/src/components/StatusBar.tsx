@@ -1,4 +1,5 @@
-import { Box } from '@mui/material';
+import { useState } from 'react';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
 import type { DesktopSyncStatus } from '@or/shared';
 import { t } from '../i18n';
 
@@ -49,61 +50,93 @@ export function StatusBar({
   lastUpdatedAt,
   syncStatus,
 }: StatusBarProps) {
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const statusError = error || syncStatus.lastError;
+  const errorDetail = syncStatus.lastErrorDetail;
 
   return (
-    <Box
-      sx={{
-        width: '100%',
-        height: '1.75rem',
-        minHeight: '1.75rem',
-        display: 'flex',
-        alignItems: 'center',
-        overflow: 'hidden',
-      }}
-    >
+    <>
       <Box
         sx={{
+          width: '100%',
+          height: '1.75rem',
+          minHeight: '1.75rem',
           display: 'flex',
           alignItems: 'center',
-          gap: '0.75em',
-          width: '100%',
-          minWidth: 0,
+          overflow: 'hidden',
         }}
       >
-        <Box sx={{ fontSize: '0.9em', color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}>
-          {t('shown_count', { count: visibleCount })} / {t('total_in_filters', { count: totalCount })} / {t('indexed_count', { count: indexedCount })}
-        </Box>
-        <Box sx={{ fontSize: '0.9em', color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}>
-          {loading ? t('loading_local_cache') : t('last_sync', { time: formatLastUpdated(lastUpdatedAt) })}
-        </Box>
         <Box
           sx={{
-            fontSize: '0.9em',
-            color: syncStatus.status === 'offline' ? 'warning.main' : 'text.secondary',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75em',
+            width: '100%',
+            minWidth: 0,
           }}
         >
-          {formatSyncStatus(syncStatus.status)} · {t('pending_count', { count: syncStatus.pendingRegistrations })}
-        </Box>
-        {statusError ? (
+          <Box sx={{ fontSize: '0.9em', color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {t('shown_count', { count: visibleCount })} / {t('total_in_filters', { count: totalCount })} / {t('indexed_count', { count: indexedCount })}
+          </Box>
+          <Box sx={{ fontSize: '0.9em', color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}>
+            {loading ? t('loading_local_cache') : t('last_sync', { time: formatLastUpdated(lastUpdatedAt) })}
+          </Box>
           <Box
-            title={statusError}
             sx={{
-              minWidth: 0,
-              flex: 1,
               fontSize: '0.9em',
-              color: 'error.main',
+              color: syncStatus.status === 'offline' ? 'warning.main' : 'text.secondary',
               whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+              flexShrink: 0,
             }}
           >
-            {statusError}
+            {formatSyncStatus(syncStatus.status)} · {t('pending_count', { count: syncStatus.pendingRegistrations })}
           </Box>
-        ) : null}
+          {statusError ? (
+            <Box
+              onClick={() => setErrorDialogOpen(true)}
+              sx={{
+                minWidth: 0,
+                flex: 1,
+                fontSize: '0.9em',
+                color: 'error.main',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                cursor: 'pointer',
+                '&:hover': { textDecoration: 'underline' },
+              }}
+            >
+              {statusError}
+            </Box>
+          ) : null}
+        </Box>
       </Box>
-    </Box>
+
+      <Dialog open={errorDialogOpen} onClose={() => setErrorDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>{t('error_details')}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ fontWeight: 'bold', mt: 1 }}>
+            {statusError}
+          </Typography>
+          {errorDetail ? (
+            <Typography
+              component="pre"
+              sx={{
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                fontFamily: 'monospace',
+                fontSize: '0.85rem',
+                mt: 2,
+              }}
+            >
+              {errorDetail}
+            </Typography>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setErrorDialogOpen(false)}>{t('close')}</Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

@@ -16,6 +16,7 @@ pub struct DesktopSyncStatus {
     pub status: String,
     pub last_successful_sync_at: Option<String>,
     pub last_error: Option<String>,
+    pub last_error_detail: Option<String>,
     pub pending_registrations: i64,
 }
 
@@ -260,6 +261,53 @@ pub struct DesktopSetCompetitionGroupRequest {
     pub competition_group_name: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, QueryableByName)]
+#[serde(rename_all = "camelCase")]
+pub struct ReservedCodeRow {
+    #[diesel(sql_type = Text)]
+    pub code: String,
+    #[diesel(sql_type = BigInt)]
+    pub is_reserved: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReservedCodePayload {
+    pub code: String,
+    pub is_reserved: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopClaimReservedCodeRequest {
+    pub code: String,
+    pub event_id: String,
+    pub course_id: String,
+    pub competition_group_name: Option<String>,
+    pub first_name: String,
+    pub last_name: String,
+    pub gender: String,
+    pub dob: String,
+    pub club: Option<String>,
+    pub si_card: Option<String>,
+    pub is_manual_eol: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReservedCodeClaimedPayload {
+    pub code: String,
+    pub competitor_id: String,
+    pub eol_number: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub gender: Option<String>,
+    pub dob: Option<String>,
+    pub club: Option<String>,
+    pub si_card: Option<String>,
+    pub is_manual_eol: Option<bool>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistrationPayload {
@@ -328,6 +376,7 @@ pub struct DeviceSyncCycleResponse {
     pub competition_groups: Vec<CompetitionGroupPayload>,
     pub competitor_delta: CompetitorDeltaResponse,
     pub event_snapshots: Vec<PullPayload>,
+    pub reserved_codes: Vec<ReservedCodePayload>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -434,6 +483,8 @@ pub struct SyncMetaRow {
     pub last_successful_sync_at: Option<String>,
     #[diesel(sql_type = Nullable<Text>)]
     pub last_sync_error: Option<String>,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub last_sync_error_detail: Option<String>,
     #[diesel(sql_type = Text)]
     pub worker_status: String,
 }

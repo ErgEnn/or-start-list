@@ -1,11 +1,12 @@
 import { z } from "zod";
-import { competitionGroupSchema, competitorSchema, courseSchema, eventSchema, paymentGroupSchema } from "./domain";
+import { competitionGroupSchema, competitorSchema, courseSchema, eventSchema, paymentGroupSchema, reservedCodeSchema } from "./domain";
 import { competitorDeltaResponseSchema, outboxItemSchema, pullResponseSchema, pushResponseSchema } from "./sync";
 
 export const desktopSyncStatusSchema = z.object({
   status: z.enum(["idle", "syncing", "online", "offline"]),
   lastSuccessfulSyncAt: z.string().datetime().nullable(),
   lastError: z.string().nullable(),
+  lastErrorDetail: z.string().nullable().optional(),
   pendingRegistrations: z.number().int().nonnegative(),
 });
 
@@ -82,6 +83,20 @@ export const desktopSetCompetitionGroupRequestSchema = z.object({
   competitionGroupName: z.string().min(1),
 });
 
+export const desktopClaimReservedCodeRequestSchema = z.object({
+  code: z.string().min(1),
+  eventId: z.string().min(1),
+  courseId: z.string().min(1),
+  competitionGroupName: z.string().optional(),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  gender: z.enum(["male", "female"]),
+  dob: z.string().min(1),
+  club: z.string().optional(),
+  siCard: z.string().optional(),
+  isManualEol: z.boolean().optional(),
+});
+
 export const deviceSyncCycleRequestSchema = z.object({
   sinceCompetitorVersion: z.number().int().nonnegative(),
   eventVersions: z.record(z.string(), z.number().int().nonnegative()),
@@ -97,6 +112,7 @@ export const deviceSyncCycleResponseSchema = z.object({
   competitionGroups: z.array(competitionGroupSchema),
   competitorDelta: competitorDeltaResponseSchema,
   eventSnapshots: z.array(pullResponseSchema),
+  reservedCodes: z.array(reservedCodeSchema),
 });
 
 export type DesktopSyncStatus = z.infer<typeof desktopSyncStatusSchema>;
@@ -111,5 +127,6 @@ export type DesktopCreateRegistrationResponse = z.infer<typeof desktopCreateRegi
 export type DesktopClearRegistrationRequest = z.infer<typeof desktopClearRegistrationRequestSchema>;
 export type DesktopClearRegistrationResponse = z.infer<typeof desktopClearRegistrationResponseSchema>;
 export type DesktopSetCompetitionGroupRequest = z.infer<typeof desktopSetCompetitionGroupRequestSchema>;
+export type DesktopClaimReservedCodeRequest = z.infer<typeof desktopClaimReservedCodeRequestSchema>;
 export type DeviceSyncCycleRequest = z.infer<typeof deviceSyncCycleRequestSchema>;
 export type DeviceSyncCycleResponse = z.infer<typeof deviceSyncCycleResponseSchema>;

@@ -313,13 +313,15 @@ export default function CompetitionGroupsPage() {
               name="price"
               rules={[{ required: true, message: t("competitionGroups.priceRequired") }]}
             >
-              <InputNumber
-                style={{ width: 180 }}
-                precision={2}
-                min={0}
-                addonBefore="\u20ac"
-                placeholder={t("competitionGroups.price")}
-              />
+              <Space.Compact>
+                <Input style={{ width: 40, pointerEvents: "none", textAlign: "center" }} value="€" readOnly tabIndex={-1} />
+                <InputNumber
+                  style={{ width: 140 }}
+                  precision={2}
+                  min={0}
+                  placeholder={t("competitionGroups.price")}
+                />
+              </Space.Compact>
             </Form.Item>
           </Space>
         </Form>

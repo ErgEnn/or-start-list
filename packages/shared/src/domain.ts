@@ -87,6 +87,24 @@ export const registrationClearedSchema = z.object({
   localSeq: z.number().int().nonnegative(),
 });
 
+export const reservedCodeSchema = z.object({
+  code: z.string().min(1),
+  isReserved: z.boolean(),
+});
+
+export const reservedCodeClaimedPayloadSchema = z.object({
+  code: z.string().min(1),
+  competitorId: z.string().min(1),
+  eolNumber: z.string().min(1),
+  firstName: z.string().min(1),
+  lastName: z.string().min(1),
+  gender: z.enum(["male", "female"]).nullable().optional(),
+  dob: z.string().nullable().optional(),
+  club: z.string().nullable().optional(),
+  siCard: z.string().nullable().optional(),
+  isManualEol: z.boolean().optional(),
+});
+
 export const syncStateSchema = z.object({
   deviceId: z.string().min(1),
   eventId: z.string().min(1),
@@ -106,4 +124,6 @@ export type CompetitionGroup = z.infer<typeof competitionGroupSchema>;
 export type PaymentGroup = z.infer<typeof paymentGroupSchema>;
 export type Registration = z.infer<typeof registrationSchema>;
 export type RegistrationCleared = z.infer<typeof registrationClearedSchema>;
+export type ReservedCode = z.infer<typeof reservedCodeSchema>;
+export type ReservedCodeClaimedPayload = z.infer<typeof reservedCodeClaimedPayloadSchema>;
 export type SyncState = z.infer<typeof syncStateSchema>;

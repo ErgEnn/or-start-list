@@ -2,7 +2,7 @@ use diesel::{
     connection::SimpleConnection,
     prelude::*,
     sql_query,
-    sql_types::{BigInt, Text},
+    sql_types::{BigInt, Nullable, Text},
     SqliteConnection,
 };
 use std::{collections::HashMap, path::PathBuf, sync::Mutex};
@@ -13,12 +13,13 @@ use uuid::Uuid;
 
 use crate::models::{
     BaseCompetitorRow, CompetitionGroupPayload, CompetitionGroupRow, CompetitionGroupSelectionRow,
-    ConfigRow, ConfigValueRow, CountRow, DesktopCreateRegistrationRequest,
+    ConfigRow, ConfigValueRow, CountRow, DesktopClaimReservedCodeRequest, DesktopCreateRegistrationRequest,
     DesktopCreateRegistrationResponse, DesktopClearRegistrationRequest, DesktopEventState,
     DesktopQueryCompetitorsRequest, DesktopQueryCompetitorsResponse, DesktopSetCompetitionGroupRequest,
     DesktopSyncStatus, EventRow, EventVersionRow, OutboxItem, OutboxRow, PaymentGroupMemberPayload,
     PaymentGroupMemberRow, PaymentGroupPayload, PaymentGroupRow, RecentRegistrationRow,
-    RegistrationClearedPayload, RegistrationPayload, SelectedRegistrationRow, SyncMetaRow,
+    RegistrationClearedPayload, RegistrationPayload, ReservedCodeClaimedPayload, ReservedCodePayload,
+    ReservedCodeRow, SelectedRegistrationRow, SyncMetaRow,
     TableColumnRow, API_KEY_KEY, DEVICE_ID_KEY, PORTAL_BASE_URL_KEY, SELECTED_EVENT_KEY,
     SYNC_STATUS_EVENT,
 };
@@ -39,6 +40,7 @@ impl Default for AppState {
                 status: "idle".to_string(),
                 last_successful_sync_at: None,
                 last_error: None,
+                last_error_detail: None,
                 pending_registrations: 0,
             }),
             sync_lock: AsyncMutex::new(()),
@@ -104,6 +106,7 @@ pub fn init_schema(db: &mut SqliteConnection) -> Result<(), String> {
     sql_query("UPDATE registrations SET competition_group_name = course_id WHERE competition_group_name = ''")
         .execute(db)
         .map_err(|error| error.to_string())?;
+    ensure_column(db, "sync_meta", "last_sync_error_detail", "last_sync_error_detail TEXT")?;
     Ok(())
 }
 
@@ -669,7 +672,7 @@ pub fn save_competition_group_selection(
 
 pub fn load_sync_status_from_db(db: &mut SqliteConnection) -> Result<DesktopSyncStatus, String> {
     let meta = sql_query(
-        "SELECT last_competitor_version, last_successful_sync_at, last_sync_error, worker_status \
+        "SELECT last_competitor_version, last_successful_sync_at, last_sync_error, last_sync_error_detail, worker_status \
          FROM sync_meta WHERE singleton = 1",
     )
     .get_result::<SyncMetaRow>(db)
@@ -679,6 +682,7 @@ pub fn load_sync_status_from_db(db: &mut SqliteConnection) -> Result<DesktopSync
         status: meta.worker_status,
         last_successful_sync_at: meta.last_successful_sync_at,
         last_error: meta.last_sync_error,
+        last_error_detail: meta.last_sync_error_detail,
         pending_registrations: pending_registrations_count(db)?,
     })
 }
@@ -714,7 +718,7 @@ pub fn build_device_cycle_request(
     db: &mut SqliteConnection,
 ) -> Result<crate::models::DeviceSyncCycleRequest, String> {
     let meta = sql_query(
-        "SELECT last_competitor_version, last_successful_sync_at, last_sync_error, worker_status \
+        "SELECT last_competitor_version, last_successful_sync_at, last_sync_error, last_sync_error_detail, worker_status \
          FROM sync_meta WHERE singleton = 1",
     )
     .get_result::<SyncMetaRow>(db)
@@ -751,6 +755,226 @@ pub fn build_device_cycle_request(
             .map(|row| (row.event_id, row.version))
             .collect(),
         pending_registrations,
+    })
+}
+
+pub fn load_available_reserved_codes(
+    db: &mut SqliteConnection,
+) -> Result<Vec<ReservedCodePayload>, String> {
+    let rows = sql_query("SELECT code, is_reserved FROM reserved_codes WHERE is_reserved = 1 ORDER BY code")
+        .load::<ReservedCodeRow>(db)
+        .map_err(|error| error.to_string())?;
+    Ok(rows
+        .into_iter()
+        .map(|row| ReservedCodePayload {
+            code: row.code,
+            is_reserved: row.is_reserved != 0,
+        })
+        .collect())
+}
+
+pub fn claim_reserved_code(
+    db: &mut SqliteConnection,
+    request: DesktopClaimReservedCodeRequest,
+) -> Result<DesktopCreateRegistrationResponse, String> {
+    let is_manual_eol = request.is_manual_eol.unwrap_or(false);
+
+    if !is_manual_eol {
+        // Verify reserved code exists and is still available
+        let code_count = sql_query(
+            "SELECT COUNT(*) AS count FROM reserved_codes WHERE code = ? AND is_reserved = 1",
+        )
+        .bind::<Text, _>(&request.code)
+        .get_result::<CountRow>(db)
+        .map_err(|error| error.to_string())?
+        .count;
+        if code_count == 0 {
+            return Err("Reserved code not found or already claimed.".to_string());
+        }
+    }
+
+    let competitor_id = Uuid::new_v4().to_string();
+    let eol_number = request.code.clone();
+
+    // Build a BaseCompetitorRow to compute eligible groups and price
+    let base_competitor = BaseCompetitorRow {
+        competitor_id: competitor_id.clone(),
+        eol_number: eol_number.clone(),
+        first_name: request.first_name.clone(),
+        last_name: request.last_name.clone(),
+        gender: Some(request.gender.clone()),
+        dob: Some(request.dob.clone()),
+        club: request.club.clone(),
+        si_card: request.si_card.clone(),
+    };
+
+    let competition_group_name = request.competition_group_name.clone().unwrap_or_default();
+    let competition_groups = load_competition_groups(db)?;
+    let payment_groups = load_payment_groups(db)?;
+
+    let price_cents = if competition_group_name.is_empty() {
+        0i64
+    } else {
+        let eligible_groups = eligible_competition_groups_for_competitor(&base_competitor, &competition_groups);
+        if !eligible_groups.iter().any(|group| group.name == competition_group_name) {
+            return Err("Competition group is not valid for this competitor.".to_string());
+        }
+        find_effective_price(
+            &competitor_id,
+            &competition_group_name,
+            &competition_groups,
+            &payment_groups,
+        )
+        .ok_or_else(|| "Competition group price could not be resolved.".to_string())?
+    };
+
+    let config = load_device_config_map(db)?;
+    let device_id = config
+        .get(DEVICE_ID_KEY)
+        .cloned()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            config
+                .get(API_KEY_KEY)
+                .cloned()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .unwrap_or_else(|| "desktop-local".to_string());
+    let created_at = now_iso()?;
+    let registration_id = Uuid::new_v4().to_string();
+
+    db.transaction::<(), diesel::result::Error, _>(|connection| {
+        // 1. Insert into source_competitors
+        sql_query(
+            "INSERT INTO source_competitors(competitor_id, eol_number, first_name, last_name, gender, dob, club, si_card) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind::<Text, _>(&competitor_id)
+        .bind::<Text, _>(&eol_number)
+        .bind::<Text, _>(&request.first_name)
+        .bind::<Text, _>(&request.last_name)
+        .bind::<diesel::sql_types::Nullable<Text>, _>(Some(request.gender.as_str()))
+        .bind::<diesel::sql_types::Nullable<Text>, _>(Some(request.dob.as_str()))
+        .bind::<diesel::sql_types::Nullable<Text>, _>(request.club.as_deref())
+        .bind::<diesel::sql_types::Nullable<Text>, _>(request.si_card.as_deref())
+        .execute(connection)?;
+
+        // 2. Mark reserved code as claimed (only if using reserved code, not manual EOL)
+        if !is_manual_eol {
+            sql_query("UPDATE reserved_codes SET is_reserved = 0 WHERE code = ?")
+                .bind::<Text, _>(&request.code)
+                .execute(connection)?;
+        }
+
+        // 3. Get next local_seq
+        let claim_seq = sql_query(
+            "SELECT COALESCE(MAX(local_seq), 0) + 1 AS count \
+             FROM ( \
+               SELECT local_seq FROM outbox \
+               UNION ALL \
+               SELECT local_seq FROM registrations \
+             )",
+        )
+        .get_result::<CountRow>(connection)?
+        .count;
+
+        // 4. Insert outbox item for reserved_code_claimed
+        let claim_payload = serde_json::to_string(&ReservedCodeClaimedPayload {
+            code: request.code.clone(),
+            competitor_id: competitor_id.clone(),
+            eol_number: eol_number.clone(),
+            first_name: request.first_name.clone(),
+            last_name: request.last_name.clone(),
+            gender: Some(request.gender.clone()),
+            dob: Some(request.dob.clone()),
+            club: request.club.clone(),
+            si_card: request.si_card.clone(),
+            is_manual_eol: Some(is_manual_eol),
+        })
+        .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
+
+        sql_query(
+            "INSERT INTO outbox(local_seq, item_type, payload, created_at, status) VALUES (?, ?, ?, ?, 'pending')",
+        )
+        .bind::<BigInt, _>(claim_seq)
+        .bind::<Text, _>("reserved_code_claimed")
+        .bind::<Text, _>(claim_payload)
+        .bind::<Text, _>(&created_at)
+        .execute(connection)?;
+
+        // 5. Get next local_seq for registration
+        let reg_seq = sql_query(
+            "SELECT COALESCE(MAX(local_seq), 0) + 1 AS count \
+             FROM ( \
+               SELECT local_seq FROM outbox \
+               UNION ALL \
+               SELECT local_seq FROM registrations \
+             )",
+        )
+        .get_result::<CountRow>(connection)?
+        .count;
+
+        // 6. Save competition group selection (only if a group was chosen)
+        if !competition_group_name.is_empty() {
+            sql_query(
+                "INSERT INTO competition_group_selections(event_id, competitor_id, competition_group_name) VALUES (?, ?, ?) \
+                 ON CONFLICT(event_id, competitor_id) DO UPDATE SET competition_group_name = excluded.competition_group_name",
+            )
+            .bind::<Text, _>(&request.event_id)
+            .bind::<Text, _>(&competitor_id)
+            .bind::<Text, _>(&competition_group_name)
+            .execute(connection)?;
+        }
+
+        // 7. Insert registration
+        sql_query(
+            "INSERT INTO registrations(registration_id, device_id, event_id, competitor_id, course_id, competition_group_name, price_cents, created_at_device, local_seq) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind::<Text, _>(&registration_id)
+        .bind::<Text, _>(&device_id)
+        .bind::<Text, _>(&request.event_id)
+        .bind::<Text, _>(&competitor_id)
+        .bind::<Text, _>(&request.course_id)
+        .bind::<Text, _>(&competition_group_name)
+        .bind::<BigInt, _>(price_cents)
+        .bind::<Text, _>(&created_at)
+        .bind::<BigInt, _>(reg_seq)
+        .execute(connection)?;
+
+        // 8. Insert registration outbox item
+        let reg_payload = serde_json::to_string(&RegistrationPayload {
+            registration_id: registration_id.clone(),
+            device_id: device_id.clone(),
+            event_id: request.event_id.clone(),
+            competitor_id: competitor_id.clone(),
+            course_id: request.course_id.clone(),
+            competition_group_name: competition_group_name.clone(),
+            price_cents,
+            created_at_device: created_at.clone(),
+            local_seq: reg_seq,
+        })
+        .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
+
+        sql_query(
+            "INSERT INTO outbox(local_seq, item_type, payload, created_at, status) VALUES (?, ?, ?, ?, 'pending')",
+        )
+        .bind::<BigInt, _>(reg_seq)
+        .bind::<Text, _>("registration_created")
+        .bind::<Text, _>(reg_payload)
+        .bind::<Text, _>(&created_at)
+        .execute(connection)?;
+
+        Ok(())
+    })
+    .map_err(|error| error.to_string())?;
+
+    Ok(DesktopCreateRegistrationResponse {
+        selected_event_id: request.event_id.clone(),
+        courses: load_courses(db, &request.event_id)?,
+        selected_courses_by_competitor: load_selected_courses(db, &request.event_id)?,
+        recent_registrations: load_recent_registrations(db, &request.event_id, 20)?,
+        push_result: None,
     })
 }
 
@@ -956,11 +1180,13 @@ pub fn clear_registration(
 pub fn update_sync_error(
     db: &mut SqliteConnection,
     message: &str,
+    detail: Option<&str>,
 ) -> Result<DesktopSyncStatus, String> {
     sql_query(
-        "UPDATE sync_meta SET last_sync_error = ?, worker_status = 'offline' WHERE singleton = 1",
+        "UPDATE sync_meta SET last_sync_error = ?, last_sync_error_detail = ?, worker_status = 'offline' WHERE singleton = 1",
     )
     .bind::<Text, _>(message)
+    .bind::<Nullable<Text>, _>(detail)
     .execute(db)
     .map_err(|error| error.to_string())?;
     load_sync_status_from_db(db)

@@ -1,4 +1,4 @@
-import { asc } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type {
   CompetitionGroupsResponse,
   DeviceSyncCycleRequest,
@@ -8,7 +8,7 @@ import type {
 import { competitionGroupsResponseSchema, paymentGroupsResponseSchema } from "@or/shared";
 import { getSourceCompetitorChanges } from "@/lib/source-competitors";
 import type { DbLike } from "./db";
-import { competitionGroups, events, paymentGroupCompetitors, paymentGroups } from "./db/schema";
+import { competitionGroups, events, paymentGroupCompetitors, paymentGroups, reservedCodes } from "./db/schema";
 import { moneyFromDb } from "./money";
 import { applyOutboxItems, loadEventDataset } from "./sync";
 
@@ -94,17 +94,30 @@ async function loadCompetitionGroupsSnapshot(client: DbLike): Promise<Competitio
   }).competitionGroups;
 }
 
+async function loadReservedCodesSnapshot(client: DbLike) {
+  const rows = await client
+    .select({
+      code: reservedCodes.code,
+      isReserved: reservedCodes.isReserved,
+    })
+    .from(reservedCodes)
+    .where(eq(reservedCodes.isReserved, true))
+    .orderBy(asc(reservedCodes.code));
+  return rows.map((row: { code: string; isReserved: boolean }) => ({ code: row.code, isReserved: true as const }));
+}
+
 export async function loadDeviceCycle(
   client: DbLike,
   deviceId: string,
   request: DeviceSyncCycleRequest,
 ): Promise<DeviceSyncCycleResponse> {
   const pushResult = await applyOutboxItems(client, deviceId, request.pendingRegistrations);
-  const [eventRows, paymentGroupRows, competitionGroupRows, competitorDelta] = await Promise.all([
+  const [eventRows, paymentGroupRows, competitionGroupRows, competitorDelta, reservedCodeRows] = await Promise.all([
     loadEventsSnapshot(client),
     loadPaymentGroupsSnapshot(client),
     loadCompetitionGroupsSnapshot(client),
     getSourceCompetitorChanges(request.sinceCompetitorVersion),
+    loadReservedCodesSnapshot(client),
   ]);
 
   const eventSnapshots = [];
@@ -125,5 +138,6 @@ export async function loadDeviceCycle(
     competitionGroups: competitionGroupRows,
     competitorDelta,
     eventSnapshots,
+    reservedCodes: reservedCodeRows,
   };
 }

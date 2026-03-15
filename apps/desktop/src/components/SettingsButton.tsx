@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import SettingsIcon from "@mui/icons-material/Settings";
+import SyncIcon from "@mui/icons-material/Sync";
 import {
   Alert,
   Box,
@@ -8,6 +9,7 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
+  Divider,
   DialogTitle,
   Slider,
   Stack,
@@ -23,6 +25,7 @@ import {
   TEXT_SCALE_STEP,
   type DeviceConfig,
 } from "../lib/device-config";
+import { desktopForceSync } from "../lib/desktop";
 import { t } from "../i18n";
 
 type SettingsButtonProps = {
@@ -39,6 +42,8 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
   const [portalBaseUrlLocked, setPortalBaseUrlLocked] = useState(false);
   const [apiKeyLocked, setApiKeyLocked] = useState(false);
 
@@ -102,8 +107,22 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
     }
   }
 
+  async function handleForceSync() {
+    setSyncing(true);
+    setSyncMessage("");
+    try {
+      await desktopForceSync();
+      setSyncMessage(t("force_sync_success"));
+    } catch {
+      setSyncMessage(t("force_sync_failed"));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   function handleClose() {
     setOpen(false);
+    setSyncMessage("");
     onCancel?.();
   }
 
@@ -160,6 +179,22 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
                       onTextScalePreview?.(nextValue);
                     }}
                   />
+                </Box>
+                <Divider />
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={syncing ? <CircularProgress size={16} /> : <SyncIcon />}
+                    onClick={() => void handleForceSync()}
+                    disabled={syncing}
+                  >
+                    {t("force_sync")}
+                  </Button>
+                  {syncMessage ? (
+                    <Typography variant="body2" sx={{ color: syncMessage === t("force_sync_success") ? "success.main" : "error.main" }}>
+                      {syncMessage}
+                    </Typography>
+                  ) : null}
                 </Box>
               </>
             )}

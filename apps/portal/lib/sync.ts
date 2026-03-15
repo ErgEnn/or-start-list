@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import type { OutboxItem, PullResponse } from "@or/shared";
 import type { DbLike } from "./db";
@@ -10,6 +11,8 @@ import {
   pricingRules,
   quickFilters,
   registrations,
+  reservedCodes,
+  sourceCompetitors,
 } from "./db/schema";
 import { moneyFromDb, toMoneyDb } from "./money";
 
@@ -51,6 +54,92 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
         .where(and(eq(registrations.eventId, payload.eventId), eq(registrations.competitorId, payload.competitorId)));
       acceptedCount += 1;
       ackSeqInclusive = Math.max(ackSeqInclusive, payload.localSeq);
+      continue;
+    }
+
+    if (item.type === "reserved_code_claimed") {
+      const payload = item.payload;
+      const isManualEol = payload.isManualEol === true;
+      const now = new Date();
+
+      if (!isManualEol) {
+        const existing = await client
+          .select({ isReserved: reservedCodes.isReserved })
+          .from(reservedCodes)
+          .where(eq(reservedCodes.code, payload.code))
+          .limit(1);
+
+        if (!existing[0] || !existing[0].isReserved) {
+          rejected.push({ localSeq: item.localSeq, code: "reserved_code_already_claimed" });
+          ackSeqInclusive = Math.max(ackSeqInclusive, item.localSeq);
+          continue;
+        }
+
+        await client
+          .update(reservedCodes)
+          .set({
+            isReserved: false,
+            competitorId: payload.competitorId,
+            eolNumber: payload.eolNumber,
+            firstName: payload.firstName,
+            lastName: payload.lastName,
+            dob: payload.dob ?? null,
+            club: payload.club ?? null,
+            siCard: payload.siCard ?? null,
+            updatedAt: now,
+          })
+          .where(eq(reservedCodes.code, payload.code));
+      }
+
+      const payloadHash = createHash("sha256")
+        .update(
+          [
+            payload.competitorId,
+            payload.eolNumber,
+            payload.firstName,
+            payload.lastName,
+            payload.gender ?? "",
+            payload.dob ?? "",
+            payload.club ?? "",
+            payload.siCard ?? "",
+          ].join("|"),
+        )
+        .digest("hex");
+
+      await client
+        .insert(sourceCompetitors)
+        .values({
+          competitorId: payload.competitorId,
+          eolNumber: payload.eolNumber,
+          firstName: payload.firstName,
+          lastName: payload.lastName,
+          gender: payload.gender ?? null,
+          dob: payload.dob ?? null,
+          club: payload.club ?? null,
+          siCard: payload.siCard ?? null,
+          payloadHash,
+          version: 1,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: sourceCompetitors.eolNumber,
+          set: {
+            competitorId: sql`excluded.competitor_id`,
+            firstName: sql`excluded.first_name`,
+            lastName: sql`excluded.last_name`,
+            gender: sql`excluded.gender`,
+            dob: sql`excluded.dob`,
+            club: sql`excluded.club`,
+            siCard: sql`excluded.si_card`,
+            payloadHash: sql`excluded.payload_hash`,
+            version: sql`${sourceCompetitors.version} + 1`,
+            updatedAt: now,
+          },
+        });
+
+      acceptedCount += 1;
+      ackSeqInclusive = Math.max(ackSeqInclusive, item.localSeq);
       continue;
     }
   }

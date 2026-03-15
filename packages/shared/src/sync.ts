@@ -10,6 +10,7 @@ import {
   quickFilterSchema,
   registrationClearedSchema,
   registrationSchema,
+  reservedCodeClaimedPayloadSchema,
 } from "./domain";
 
 export const outboxItemSchema = z.discriminatedUnion("type", [
@@ -24,6 +25,13 @@ export const outboxItemSchema = z.discriminatedUnion("type", [
     localSeq: z.number().int().nonnegative(),
     type: z.literal("registration_cleared"),
     payload: registrationClearedSchema,
+    createdAt: z.string().min(1),
+    status: z.enum(["pending", "synced", "failed"]),
+  }),
+  z.object({
+    localSeq: z.number().int().nonnegative(),
+    type: z.literal("reserved_code_claimed"),
+    payload: reservedCodeClaimedPayloadSchema,
     createdAt: z.string().min(1),
     status: z.enum(["pending", "synced", "failed"]),
   }),
