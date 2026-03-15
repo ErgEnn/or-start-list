@@ -4,9 +4,6 @@ import type { DesktopSyncStatus } from '@or/shared';
 import { t } from '../i18n';
 
 type StatusBarProps = {
-  totalCount: number;
-  indexedCount: number;
-  visibleCount: number;
   loading: boolean;
   error: string;
   lastUpdatedAt: Date | null;
@@ -42,9 +39,6 @@ function formatSyncStatus(status: DesktopSyncStatus['status']) {
 }
 
 export function StatusBar({
-  totalCount,
-  indexedCount,
-  visibleCount,
   loading,
   error,
   lastUpdatedAt,
@@ -75,9 +69,6 @@ export function StatusBar({
             minWidth: 0,
           }}
         >
-          <Box sx={{ fontSize: '0.9em', color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}>
-            {t('shown_count', { count: visibleCount })} / {t('total_in_filters', { count: totalCount })} / {t('indexed_count', { count: indexedCount })}
-          </Box>
           <Box sx={{ fontSize: '0.9em', color: 'text.secondary', whiteSpace: 'nowrap', flexShrink: 0 }}>
             {loading ? t('loading_local_cache') : t('last_sync', { time: formatLastUpdated(lastUpdatedAt) })}
           </Box>

@@ -1,4 +1,4 @@
-import { ToggleButton } from '@mui/material';
+import { Box, ToggleButton } from '@mui/material';
 import type { PaymentGroup } from '@or/shared';
 import { SpacedToggleButtonGroup } from './SpacedToggleButtonGroup';
 import { t } from '../i18n';
@@ -49,30 +49,36 @@ type FilterBarProps = {
 
 export function FilterBar({ paymentGroups, value, onChange }: FilterBarProps) {
   return (
-    <SpacedToggleButtonGroup
-      fullWidth
-      sx={{ gap: '2em' }}
-      exclusive
-      value={value}
-      onChange={(_, nextValue: string | null) => {
-        if (nextValue) {
-          onChange(nextValue);
-        }
-      }}
-    >
-        <ToggleButton value="all">
-            {t('all')}
-        </ToggleButton>
-        {paymentGroups.map((group) => (
-          <ToggleButton
-            key={group.paymentGroupId}
-            value={group.paymentGroupId}
-            sx={getFilterButtonStyles(group.colorHex, value === group.paymentGroupId)}
-          >
-              {group.name}
+    <Box sx={{
+      overflowX: 'auto',
+      flexShrink: 0,
+      '&::-webkit-scrollbar': { display: 'none' },
+      scrollbarWidth: 'none',
+    }}>
+      <SpacedToggleButtonGroup
+        sx={{ gap: '2em', flexWrap: 'nowrap' }}
+        exclusive
+        value={value}
+        onChange={(_, nextValue: string | null) => {
+          if (nextValue) {
+            onChange(nextValue);
+          }
+        }}
+      >
+          <ToggleButton value="all" sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {t('all')}
           </ToggleButton>
-        ))}
-    </SpacedToggleButtonGroup>
+          {paymentGroups.map((group) => (
+            <ToggleButton
+              key={group.paymentGroupId}
+              value={group.paymentGroupId}
+              sx={{ whiteSpace: 'nowrap', flexShrink: 0, ...getFilterButtonStyles(group.colorHex, value === group.paymentGroupId) }}
+            >
+                {group.name}
+            </ToggleButton>
+          ))}
+      </SpacedToggleButtonGroup>
+    </Box>
   );
 }
 

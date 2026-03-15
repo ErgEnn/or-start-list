@@ -46,6 +46,8 @@ jobs:
 
       - name: Build desktop app
         run: pnpm --filter @or/desktop tauri:build
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
 
       - name: Compute release metadata
         if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || github.ref == 'refs/heads/main'

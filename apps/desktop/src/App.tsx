@@ -126,12 +126,13 @@ export function App() {
     setInitialEventPromptHandled(true);
   }, [initialEventPromptHandled, loading, events.length]);
 
+  const [jumpScrollToken, setJumpScrollToken] = useState(0);
   const scrollTarget =
     focusedCompetitor ??
     (selectedJumpLetter
       ? {
           competitorId: jumpTargets.get(selectedJumpLetter) ?? '',
-          token: 0,
+          token: jumpScrollToken,
         }
       : null);
 
@@ -205,12 +206,16 @@ export function App() {
         <QuickJumpBar
           availableLetters={new Set(jumpTargets.keys())}
           selectedLetter={selectedJumpLetter}
-          onJump={setSelectedJumpLetter}
+          onJump={(letter) => {
+            setSelectedJumpLetter(letter);
+            setJumpScrollToken(Date.now());
+          }}
         />
         <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
           <MainList
             rows={rows}
             paymentGroups={paymentGroups}
+            competitionGroups={competitionGroups}
             selectedFilter={selectedFilter}
             loading={loading || eventLoading}
             scrollTarget={scrollTarget?.competitorId ? scrollTarget : null}
@@ -231,9 +236,6 @@ export function App() {
         onSelectRegistration={handleRecentRegistrationClick}
       />
       <StatusBar
-        totalCount={groupedCount}
-        indexedCount={indexedCount}
-        visibleCount={rows.length}
         loading={loading || eventLoading}
         error={error}
         lastUpdatedAt={lastUpdatedAt}

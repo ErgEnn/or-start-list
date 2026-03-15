@@ -20,6 +20,8 @@ type EolPerson = {
   BirthDate?: { Date?: TextLike | EolTextNode } | TextLike | EolTextNode;
   Sex?: TextLike | EolTextNode;
   Gender?: TextLike | EolTextNode;
+  "@_sex"?: TextLike;
+  "@_gender"?: TextLike;
 };
 type EolCCard = {
   CCardId?: TextLike | EolTextNode | Array<TextLike | EolTextNode>;
@@ -160,6 +162,8 @@ function toSourceCompetitor(node: EolCompetitor): SourceCompetitorRow | null {
   const gender =
     normalizeGender(readText(person.Sex)) ??
     normalizeGender(readText(person.Gender)) ??
+    normalizeGender(person["@_sex"]?.toString()) ??
+    normalizeGender(person["@_gender"]?.toString()) ??
     undefined;
   const rawDob =
     readText((person.BirthDate as UnknownMap | undefined)?.Date) ??

@@ -27,11 +27,10 @@ export function QuickJumpBar({ availableLetters, selectedLetter, onJump }: Quick
         flexShrink: 0,
       }}
     >
-      {LETTERS.map((letter) => (
+      {LETTERS.filter((letter) => availableLetters.has(letter)).map((letter) => (
         <ToggleButton
           key={letter}
           value={letter}
-          disabled={!availableLetters.has(letter)}
           sx={{
             flex: 1,
             minHeight: 0,

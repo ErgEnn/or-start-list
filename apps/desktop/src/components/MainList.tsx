@@ -1,23 +1,21 @@
-import { forwardRef, memo, useEffect, useMemo, useRef } from 'react';
+import { forwardRef, memo, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Paper,
-  MenuItem,
-  Select,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  ToggleButton,
-  ToggleButtonGroup,
 } from '@mui/material';
 import type { CompetitionGroup, Course, DesktopCompetitorRow, PaymentGroup } from '@or/shared';
 import { t } from '../i18n';
+import { CompetitorDetailDialog } from './CompetitorDetailDialog';
 
 type MainListProps = {
   rows: DesktopCompetitorRow[];
   paymentGroups: PaymentGroup[];
+  competitionGroups: CompetitionGroup[];
   selectedFilter: string;
   loading: boolean;
   scrollTarget: { competitorId: string; token: number } | null;
@@ -34,6 +32,7 @@ type MainListProps = {
 export const MainList = memo(function MainList({
   rows,
   paymentGroups,
+  competitionGroups,
   selectedFilter,
   loading,
   scrollTarget,
@@ -47,10 +46,7 @@ export const MainList = memo(function MainList({
   onSelectCourse,
 }: MainListProps) {
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
-  const courseNameById = useMemo(
-    () => new Map(courses.map((course) => [course.courseId, course.name])),
-    [courses],
-  );
+  const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | null>(null);
   const colorByCompetitorId = useMemo(() => {
     const next = new Map<string, string>();
 
@@ -68,6 +64,11 @@ export const MainList = memo(function MainList({
     return next;
   }, [paymentGroups]);
 
+  const courseNameById = useMemo(
+    () => new Map(courses.map((course) => [course.courseId, course.name])),
+    [courses],
+  );
+
   useEffect(() => {
     if (!scrollTarget?.competitorId) {
       return;
@@ -75,107 +76,114 @@ export const MainList = memo(function MainList({
 
     const row = rowRefs.current.get(scrollTarget.competitorId);
     row?.scrollIntoView({ block: 'center' });
-  }, [rows, scrollTarget]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollTarget?.token]);
+
+  const selectedCompetitor = useMemo(
+    () => rows.find((row) => row.competitorId === selectedCompetitorId) ?? null,
+    [rows, selectedCompetitorId],
+  );
 
   return (
+    <>
       <TableContainer
-      component={Paper}
-      sx={{ height: '100%', minHeight: 0, overflowY: 'auto' }}
-    >
-      <Table stickyHeader>
-        <TableHead>
-          <TableRow>
-            <TableCell>{t('eol_code')}</TableCell>
-            <TableCell>{t('first_name')}</TableCell>
-            <TableCell>{t('last_name')}</TableCell>
-            <TableCell>{t('si_code')}</TableCell>
-            <TableCell>{t('class')}</TableCell>
-            <TableCell>{t('price')}</TableCell>
-            <TableCell>{t('course')}</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {loading && rows.length === 0 ? (
+        component={Paper}
+        sx={{ height: '100%', minHeight: 0, overflowY: 'auto' }}
+      >
+        <Table stickyHeader>
+          <TableHead>
             <TableRow>
-              <TableCell colSpan={7} align='center'>
-                {t('loading_competitors')}
-              </TableCell>
+              <TableCell>{t('eol_code')}</TableCell>
+              <TableCell>{t('first_name')}</TableCell>
+              <TableCell>{t('last_name')}</TableCell>
             </TableRow>
-          ) : null}
-          {rows.map((item) => {
-            const isLetterHighlighted =
-              highlightedLetter !== null &&
-              item.lastName.trim().charAt(0).toLocaleUpperCase() === highlightedLetter;
-            const isFocused = highlightedCompetitorId === item.competitorId;
+          </TableHead>
+          <TableBody>
+            {loading && rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={3} align='center'>
+                  {t('loading_competitors')}
+                </TableCell>
+              </TableRow>
+            ) : null}
+            {rows.map((item) => {
+              const isLetterHighlighted =
+                highlightedLetter !== null &&
+                item.lastName.trim().charAt(0).toLocaleUpperCase() === highlightedLetter;
+              const isFocused = highlightedCompetitorId === item.competitorId;
+              const hasSelectedCourse = Boolean(selectedCoursesByCompetitor[item.competitorId]);
 
-            return (
-              <CompetitorTableRow
-                key={item.competitorId}
-                item={item}
-                ref={(element) => {
-                  if (element) {
-                    rowRefs.current.set(item.competitorId, element);
-                    return;
-                  }
+              return (
+                <CompetitorTableRow
+                  key={item.competitorId}
+                  item={item}
+                  ref={(element) => {
+                    if (element) {
+                      rowRefs.current.set(item.competitorId, element);
+                      return;
+                    }
 
-                  rowRefs.current.delete(item.competitorId);
-                }}
-                selectedCourseId={selectedCoursesByCompetitor[item.competitorId] ?? null}
-                submitting={submittingCompetitorIds.has(item.competitorId)}
-                isLetterHighlighted={isLetterHighlighted}
-                isFocused={isFocused}
-                rowColor={selectedFilter === 'all' ? colorByCompetitorId.get(item.competitorId) ?? null : null}
-                courses={courses}
-                courseNameById={courseNameById}
-                textScale={textScale}
-                onSelectCompetitionGroup={onSelectCompetitionGroup}
-                onSelectCourse={onSelectCourse}
-              />
-            );
-          })}
-          {!loading && rows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={7} align='center'>
-                {t('no_competitors_found')}
-              </TableCell>
-            </TableRow>
-          ) : null}
-        </TableBody>
-      </Table>
-    </TableContainer>
+                    rowRefs.current.delete(item.competitorId);
+                  }}
+                  hasSelectedCourse={hasSelectedCourse}
+                  isLetterHighlighted={isLetterHighlighted}
+                  isFocused={isFocused}
+                  rowColor={selectedFilter === 'all' ? colorByCompetitorId.get(item.competitorId) ?? null : null}
+                  textScale={textScale}
+                  onClick={() => setSelectedCompetitorId(item.competitorId)}
+                />
+              );
+            })}
+            {!loading && rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={3} align='center'>
+                  {t('no_competitors_found')}
+                </TableCell>
+              </TableRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      {selectedCompetitor ? (
+        <CompetitorDetailDialog
+          competitor={selectedCompetitor}
+          allCompetitionGroups={competitionGroups}
+          courses={courses}
+          courseNameById={courseNameById}
+          textScale={textScale}
+          selectedCourseId={selectedCoursesByCompetitor[selectedCompetitor.competitorId] ?? null}
+          submitting={submittingCompetitorIds.has(selectedCompetitor.competitorId)}
+          onSelectCompetitionGroup={onSelectCompetitionGroup}
+          onSelectCourse={onSelectCourse}
+          onClose={() => setSelectedCompetitorId(null)}
+        />
+      ) : null}
+    </>
   );
 });
 
 type CompetitorTableRowProps = {
   item: DesktopCompetitorRow;
-  selectedCourseId: string | null;
-  submitting: boolean;
+  hasSelectedCourse: boolean;
   isLetterHighlighted: boolean;
   isFocused: boolean;
   rowColor: string | null;
-  courses: Course[];
-  courseNameById: Map<string, string>;
   textScale: number;
-  onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
-  onSelectCourse: (competitorId: string, courseId: string | null) => Promise<void>;
+  onClick: () => void;
 };
 
 const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableRowProps>(
   function CompetitorTableRow({
     item,
-    selectedCourseId,
-    submitting,
+    hasSelectedCourse,
     isLetterHighlighted,
     isFocused,
     rowColor,
-    courses,
-    courseNameById,
     textScale,
-    onSelectCompetitionGroup,
-    onSelectCourse,
+    onClick,
   }, ref) {
     const isHighlighted = isFocused || isLetterHighlighted;
-    const hasSelectedCourse = Boolean(selectedCourseId);
     const rowBackgroundColor = isFocused
       ? 'warning.light'
       : isHighlighted
@@ -195,7 +203,9 @@ const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableR
       <TableRow
         ref={ref}
         hover
+        onClick={onClick}
         sx={{
+          cursor: 'pointer',
           color: rowColor ? getContrastingTextColor(rowBackgroundColor) : hasSelectedCourse ? '#ddd' : 'text.primary',
           backgroundColor: rowBackgroundColor,
           '&:hover': {
@@ -214,41 +224,15 @@ const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableR
         <TableCell>{item.eolNumber}</TableCell>
         <TableCell>{item.firstName}</TableCell>
         <TableCell>{item.lastName}</TableCell>
-        <TableCell>{item.siCard ?? ''}</TableCell>
-        <TableCell>
-          <CompetitionGroupSelector
-            competitorId={item.competitorId}
-            competitionGroups={item.availableCompetitionGroups}
-            selectedCompetitionGroupName={item.selectedCompetitionGroupName}
-            disabled={hasSelectedCourse}
-            loading={submitting}
-            textScale={textScale}
-            onSelectCompetitionGroup={onSelectCompetitionGroup}
-          />
-        </TableCell>
-        <TableCell>{item.priceCents === null ? '' : formatPrice(item.priceCents)}</TableCell>
-        <TableCell>
-          <CourseSelector
-            competitorId={item.competitorId}
-            courses={courses}
-            courseNameById={courseNameById}
-            textScale={textScale}
-            selectedCourseId={selectedCourseId}
-            loading={submitting || item.selectedCompetitionGroupName === null}
-            onSelectCourse={onSelectCourse}
-          />
-        </TableCell>
       </TableRow>
     );
   }),
   (previousProps, nextProps) =>
     previousProps.item === nextProps.item &&
-    previousProps.selectedCourseId === nextProps.selectedCourseId &&
-    previousProps.submitting === nextProps.submitting &&
+    previousProps.hasSelectedCourse === nextProps.hasSelectedCourse &&
     previousProps.isLetterHighlighted === nextProps.isLetterHighlighted &&
     previousProps.isFocused === nextProps.isFocused &&
     previousProps.rowColor === nextProps.rowColor &&
-    previousProps.courses === nextProps.courses &&
     previousProps.textScale === nextProps.textScale,
 );
 
@@ -283,96 +267,4 @@ function getContrastingTextColor(colorHex: string) {
   const blue = Number.parseInt(normalized.slice(4, 6), 16);
   const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
   return brightness > 160 ? '#111' : '#fff';
-}
-
-function CompetitionGroupSelector({
-  competitorId,
-  competitionGroups,
-  selectedCompetitionGroupName,
-  disabled,
-  loading,
-  textScale,
-  onSelectCompetitionGroup,
-}: {
-  competitorId: string;
-  competitionGroups: CompetitionGroup[];
-  selectedCompetitionGroupName: string | null;
-  disabled: boolean;
-  loading: boolean;
-  textScale: number;
-  onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
-}) {
-  return (
-    <Select
-      value={selectedCompetitionGroupName ?? ''}
-      disabled={disabled || loading || competitionGroups.length === 0}
-      displayEmpty
-      fullWidth
-      size='small'
-      sx={{ fontSize: `${Math.max(0.9, textScale * 0.8)}rem` }}
-      onChange={(event) => {
-        const nextValue = String(event.target.value);
-        if (!nextValue) {
-          return;
-        }
-        void onSelectCompetitionGroup(competitorId, nextValue);
-      }}
-    >
-      {competitionGroups.length === 0 ? (
-        <MenuItem value=''>{t('no_competition_groups')}</MenuItem>
-      ) : null}
-      {competitionGroups.map((group) => (
-        <MenuItem key={group.name} value={group.name}>
-          {group.name}
-        </MenuItem>
-      ))}
-    </Select>
-  );
-}
-
-function CourseSelector({
-  competitorId,
-  courses,
-  courseNameById,
-  textScale,
-  selectedCourseId,
-  loading,
-  onSelectCourse,
-}: {
-  competitorId: string;
-  courses: Course[];
-  courseNameById: Map<string, string>;
-  textScale: number;
-  selectedCourseId: string | null;
-  loading: boolean;
-  onSelectCourse: (competitorId: string, courseId: string | null) => Promise<void>;
-}) {
-  return (
-      <ToggleButtonGroup
-        exclusive
-        value={selectedCourseId}
-        disabled={courses.length === 0 || loading}
-        sx={{ flexWrap: 'wrap', width: '100%' }}
-        onChange={(_, nextValue: string | null) => {
-          void onSelectCourse(competitorId, nextValue);
-        }}
-      >
-        {courses.map((course) => (
-          <ToggleButton key={course.courseId} value={course.courseId} sx={{
-            fontSize: `${Math.max(0.9, textScale * 0.8)}rem`,
-            lineHeight: 1,
-            flexGrow: 1,
-            }}>
-            {courseNameById.get(course.courseId) ?? course.name}
-          </ToggleButton>
-        ))}
-      </ToggleButtonGroup>
-  );
-}
-
-function formatPrice(priceCents: number) {
-  return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: 'EUR',
-  }).format(priceCents / 100);
 }

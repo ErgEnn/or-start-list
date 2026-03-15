@@ -196,6 +196,9 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
                     </Typography>
                   ) : null}
                 </Box>
+                <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                  Build: #{__BUILD_NUMBER__}
+                </Typography>
               </>
             )}
           </Stack>
