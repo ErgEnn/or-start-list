@@ -59,8 +59,8 @@ jobs:
             "prerelease=false" >> $env:GITHUB_OUTPUT
           } elseif ("${{ github.ref }}" -eq "refs/heads/main") {
             $shortSha = "${{ github.sha }}".Substring(0, 7)
-            "tag=desktop-main" >> $env:GITHUB_OUTPUT
-            "name=Desktop main ($shortSha)" >> $env:GITHUB_OUTPUT
+            "tag=desktop-build-${{ github.run_number }}" >> $env:GITHUB_OUTPUT
+            "name=Desktop Build #${{ github.run_number }} ($shortSha)" >> $env:GITHUB_OUTPUT
             "prerelease=true" >> $env:GITHUB_OUTPUT
           } else {
             $shortSha = "${{ github.sha }}".Substring(0, 7)
