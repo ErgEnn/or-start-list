@@ -6,6 +6,10 @@ authors = ["OR Start List Team"]
 license = "MIT"
 edition = "2021"
 
+[lib]
+name = "or_start_list_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
 [build-dependencies]
 tauri-build = { version = "=2.5.5", features = [] }
 
