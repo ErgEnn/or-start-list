@@ -20,6 +20,39 @@ permissions:
   contents: write
 
 jobs:
+  release-meta:
+    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      name: ${{ steps.meta.outputs.name }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: apps/desktop/src-tauri/tauri.conf.json
+
+      - name: Compute release metadata
+        id: meta
+        run: |
+          version=$(jq -r '.version' apps/desktop/src-tauri/tauri.conf.json)
+          short_sha="${{ github.sha }}"
+          short_sha="${short_sha:0:7}"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "name=Desktop ${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "tag=desktop-build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "name=Desktop Build #${{ github.run_number }} ($short_sha)" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=desktop-v${version}-${short_sha}" >> "$GITHUB_OUTPUT"
+            echo "name=Desktop v${version} ($short_sha)" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build-windows:
     runs-on: windows-latest
 
@@ -49,40 +82,97 @@ jobs:
         env:
           BUILD_NUMBER: ${{ github.run_number }}
 
-      - name: Compute release metadata
-        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || github.ref == 'refs/heads/main'
-        id: release_meta
-        shell: pwsh
-        run: |
-          $version = (Get-Content "apps/desktop/src-tauri/tauri.conf.json" | ConvertFrom-Json).version
-          if ("${{ github.ref_type }}" -eq "tag") {
-            "tag=${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
-            "name=Desktop ${{ github.ref_name }}" >> $env:GITHUB_OUTPUT
-            "prerelease=false" >> $env:GITHUB_OUTPUT
-          } elseif ("${{ github.ref }}" -eq "refs/heads/main") {
-            $shortSha = "${{ github.sha }}".Substring(0, 7)
-            "tag=desktop-build-${{ github.run_number }}" >> $env:GITHUB_OUTPUT
-            "name=Desktop Build #${{ github.run_number }} ($shortSha)" >> $env:GITHUB_OUTPUT
-            "prerelease=true" >> $env:GITHUB_OUTPUT
-          } else {
-            $shortSha = "${{ github.sha }}".Substring(0, 7)
-            "tag=desktop-v$version-$shortSha" >> $env:GITHUB_OUTPUT
-            "name=Desktop v$version ($shortSha)" >> $env:GITHUB_OUTPUT
-            "prerelease=true" >> $env:GITHUB_OUTPUT
-          }
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: |
+            apps/desktop/src-tauri/target/release/or_start_list_desktop.exe
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+            apps/desktop/src-tauri/target/release/bundle/**/*.msi
 
-      - name: Publish GitHub release assets
-        if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || github.ref == 'refs/heads/main'
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: sdkmanager --install "ndk;27.0.12077973"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Initialize Tauri Android
+        run: pnpm --filter @or/desktop exec tauri android init
+
+      - name: Build Android APK
+        run: pnpm --filter @or/desktop exec tauri android build --apk
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: apps/desktop/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+
+  publish-release:
+    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || github.ref == 'refs/heads/main'
+    needs: [release-meta, build-windows, build-android]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-builds
+          path: windows
+
+      - name: Download Android artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: android
+
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_meta.outputs.tag }}
-          name: ${{ steps.release_meta.outputs.name }}
+          tag_name: ${{ needs.release-meta.outputs.tag }}
+          name: ${{ needs.release-meta.outputs.name }}
           target_commitish: ${{ github.sha }}
-          prerelease: ${{ steps.release_meta.outputs.prerelease == 'true' }}
+          prerelease: ${{ needs.release-meta.outputs.prerelease == 'true' }}
           generate_release_notes: true
           append_body: false
           make_latest: ${{ github.ref_type == 'tag' }}
           files: |
-            apps/desktop/src-tauri/target/release/or_start_list_desktop.exe
-            apps/desktop/src-tauri/target/release/bundle/**/*.exe
-            apps/desktop/src-tauri/target/release/bundle/**/*.msi
+            windows/**/*.exe
+            windows/**/*.msi
+            android/**/*.apk
