@@ -60,6 +60,7 @@ export function App() {
     () => events.find((event) => event.eventId === selectedEventId) ?? null,
     [events, selectedEventId],
   );
+  const showSearchDobColumn = searchInput.trim().length > 0;
 
   const jumpTargets = useMemo(() => {
     const targets = new Map<string, string>();
@@ -217,6 +218,7 @@ export function App() {
             paymentGroups={paymentGroups}
             competitionGroups={competitionGroups}
             selectedFilter={selectedFilter}
+            showDobColumn={showSearchDobColumn}
             loading={loading || eventLoading}
             scrollTarget={scrollTarget?.competitorId ? scrollTarget : null}
             highlightedCompetitorId={focusedCompetitor?.competitorId ?? null}
