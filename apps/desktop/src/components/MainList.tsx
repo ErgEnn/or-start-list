@@ -17,6 +17,7 @@ type MainListProps = {
   paymentGroups: PaymentGroup[];
   competitionGroups: CompetitionGroup[];
   selectedFilter: string;
+  showDobColumn: boolean;
   loading: boolean;
   scrollTarget: { competitorId: string; token: number } | null;
   highlightedCompetitorId: string | null;
@@ -34,6 +35,7 @@ export const MainList = memo(function MainList({
   paymentGroups,
   competitionGroups,
   selectedFilter,
+  showDobColumn,
   loading,
   scrollTarget,
   highlightedCompetitorId,
@@ -96,12 +98,13 @@ export const MainList = memo(function MainList({
               <TableCell>{t('eol_code')}</TableCell>
               <TableCell>{t('first_name')}</TableCell>
               <TableCell>{t('last_name')}</TableCell>
+              {showDobColumn ? <TableCell>{t('dob')}</TableCell> : null}
             </TableRow>
           </TableHead>
           <TableBody>
             {loading && rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} align='center'>
+                <TableCell colSpan={showDobColumn ? 4 : 3} align='center'>
                   {t('loading_competitors')}
                 </TableCell>
               </TableRow>
@@ -129,6 +132,7 @@ export const MainList = memo(function MainList({
                   isLetterHighlighted={isLetterHighlighted}
                   isFocused={isFocused}
                   rowColor={selectedFilter === 'all' ? colorByCompetitorId.get(item.competitorId) ?? null : null}
+                  showDobColumn={showDobColumn}
                   textScale={textScale}
                   onClick={() => setSelectedCompetitorId(item.competitorId)}
                 />
@@ -136,7 +140,7 @@ export const MainList = memo(function MainList({
             })}
             {!loading && rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={3} align='center'>
+                <TableCell colSpan={showDobColumn ? 4 : 3} align='center'>
                   {t('no_competitors_found')}
                 </TableCell>
               </TableRow>
@@ -169,6 +173,7 @@ type CompetitorTableRowProps = {
   isLetterHighlighted: boolean;
   isFocused: boolean;
   rowColor: string | null;
+  showDobColumn: boolean;
   textScale: number;
   onClick: () => void;
 };
@@ -180,6 +185,7 @@ const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableR
     isLetterHighlighted,
     isFocused,
     rowColor,
+    showDobColumn,
     textScale,
     onClick,
   }, ref) {
@@ -224,6 +230,7 @@ const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableR
         <TableCell>{item.eolNumber}</TableCell>
         <TableCell>{item.firstName}</TableCell>
         <TableCell>{item.lastName}</TableCell>
+        {showDobColumn ? <TableCell>{item.dob ?? '—'}</TableCell> : null}
       </TableRow>
     );
   }),
@@ -233,6 +240,7 @@ const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableR
     previousProps.isLetterHighlighted === nextProps.isLetterHighlighted &&
     previousProps.isFocused === nextProps.isFocused &&
     previousProps.rowColor === nextProps.rowColor &&
+    previousProps.showDobColumn === nextProps.showDobColumn &&
     previousProps.textScale === nextProps.textScale,
 );
 
