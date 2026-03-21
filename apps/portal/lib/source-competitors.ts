@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { gunzipSync, inflateSync } from "node:zlib";
-import { and, asc, eq, gt, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, or, sql } from "drizzle-orm";
 import { XMLParser } from "fast-xml-parser";
-import { db, type DbLike } from "@/lib/db";
-import { sourceCompetitors } from "@/lib/db/schema";
+import { withTransaction, db, type DbLike } from "@/lib/db";
+import { auditLog, sourceCompetitors } from "@/lib/db/schema";
 
 type UnknownMap = Record<string, unknown>;
 type TextLike = string | number | boolean;
@@ -52,9 +52,33 @@ export type SourceCompetitorRow = {
   siCard?: string;
 };
 
+type SourceCompetitorImportTrigger = "manual" | "scheduled";
+type SourceCompetitorImportPayload = {
+  importedCount: number;
+  changedCount: number;
+  deletedCount: number;
+  latestRowVersion: number;
+  trigger: SourceCompetitorImportTrigger;
+};
+
+export type SourceCompetitorImportStatus = {
+  importedAt: string | null;
+  trigger?: SourceCompetitorImportTrigger;
+};
+
 const DEFAULT_SOURCE_URL = "https://app.orienteerumine.ee/eteenused/xml_eolcodes.php?utf";
+const SOURCE_COMPETITOR_IMPORT_ACTION = "source_competitors.import";
 
 export const SOURCE_COMPETITOR_URL = process.env.COMPETITOR_SOURCE_URL ?? DEFAULT_SOURCE_URL;
+
+let inFlightSourceCompetitorImport:
+  | Promise<
+      Awaited<ReturnType<typeof upsertSourceCompetitorImport>> & {
+        importedAt: string;
+        trigger: SourceCompetitorImportTrigger;
+      }
+    >
+  | null = null;
 
 function readText(value: unknown): string | undefined {
   if (typeof value === "string") {
@@ -370,6 +394,84 @@ export async function upsertSourceCompetitorImport(
     deletedCount: 0,
     latestRowVersion: latestVersionResult[0]?.latestVersion ?? 0,
   };
+}
+
+async function recordSourceCompetitorImport(
+  tx: DbLike,
+  payload: SourceCompetitorImportPayload,
+  importedAt: Date,
+) {
+  await tx.insert(auditLog).values({
+    actorType: payload.trigger === "scheduled" ? "system" : "admin",
+    actorId: payload.trigger === "scheduled" ? "source-competitor-cron" : "source-competitor-manual-import",
+    action: SOURCE_COMPETITOR_IMPORT_ACTION,
+    payload,
+    createdAt: importedAt,
+  });
+}
+
+function readImportTrigger(value: unknown): SourceCompetitorImportTrigger | undefined {
+  return value === "manual" || value === "scheduled" ? value : undefined;
+}
+
+export async function getLatestSourceCompetitorImportStatus(): Promise<SourceCompetitorImportStatus> {
+  const rows = await db
+    .select({
+      importedAt: auditLog.createdAt,
+      payload: auditLog.payload,
+    })
+    .from(auditLog)
+    .where(eq(auditLog.action, SOURCE_COMPETITOR_IMPORT_ACTION))
+    .orderBy(desc(auditLog.createdAt))
+    .limit(1);
+
+  const latest = rows[0];
+  if (!latest?.importedAt) {
+    return { importedAt: null };
+  }
+
+  const payload = latest.payload as Record<string, unknown> | null;
+  return {
+    importedAt: latest.importedAt.toISOString(),
+    trigger: readImportTrigger(payload?.trigger),
+  };
+}
+
+export async function importSourceCompetitors(trigger: SourceCompetitorImportTrigger = "manual") {
+  if (inFlightSourceCompetitorImport) {
+    return inFlightSourceCompetitorImport;
+  }
+
+  const run = (async () => {
+    const xml = await downloadSourceCompetitorXml();
+    const rows = parseSourceCompetitorsXml(xml);
+    const importedAt = new Date();
+
+    const result = await withTransaction(async (tx) => {
+      const imported = await upsertSourceCompetitorImport(tx, rows);
+      await recordSourceCompetitorImport(
+        tx,
+        {
+          ...imported,
+          trigger,
+        },
+        importedAt,
+      );
+      return imported;
+    });
+
+    return {
+      ...result,
+      importedAt: importedAt.toISOString(),
+      trigger,
+    };
+  })();
+
+  inFlightSourceCompetitorImport = run.finally(() => {
+    inFlightSourceCompetitorImport = null;
+  });
+
+  return inFlightSourceCompetitorImport;
 }
 
 export async function getSourceCompetitorChanges(sinceRowVersion: number, limit?: number, afterCompetitorId = "") {

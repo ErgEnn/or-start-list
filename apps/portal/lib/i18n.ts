@@ -27,6 +27,8 @@ const en = {
   "competitors.downloadOrigin": "Download new list from origin",
   "competitors.importSuccess": "Source import completed.",
   "competitors.importError": "Failed to import competitors from source.",
+  "competitors.lastSourceImport": "Last source update",
+  "competitors.lastSourceImportNever": "Not downloaded yet",
   "competitors.total": "Total",
   "competitors.eventId": "Event ID",
   "competitors.competitorId": "Competitor ID",
