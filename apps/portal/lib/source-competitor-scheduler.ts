@@ -2,6 +2,10 @@ import { getLatestSourceCompetitorImportStatus, importSourceCompetitors } from "
 
 const SOURCE_COMPETITOR_TIME_ZONE = "Europe/Tallinn";
 const SOURCE_COMPETITOR_IMPORT_HOUR = 16;
+// JavaScript timers clamp delays to a signed 32-bit integer.
+const MAX_TIMEOUT_MS = 2_147_483_647;
+const MIN_DELAY_MS = 1_000;
+const DST_CONVERGENCE_ITERATIONS = 3;
 
 type SchedulerState = {
   started: boolean;
@@ -78,7 +82,9 @@ function createDateForTimeZone(
 ) {
   let candidate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
 
-  for (let index = 0; index < 3; index += 1) {
+  for (let index = 0; index < DST_CONVERGENCE_ITERATIONS; index += 1) {
+    // Re-apply the timezone offset a few times so the UTC instant converges even
+    // when DST changes alter the offset during the conversion step itself.
     const offset = getTimeZoneOffsetMs(candidate, timeZone);
     candidate = new Date(Date.UTC(year, month - 1, day, hour, minute, second) - offset);
   }
@@ -101,9 +107,7 @@ function getTodayRunAt(now: Date) {
 
 function getNextRunAt(now: Date) {
   const parts = getDateTimeParts(now, SOURCE_COMPETITOR_TIME_ZONE);
-  const shouldUseNextDay =
-    parts.hour > SOURCE_COMPETITOR_IMPORT_HOUR ||
-    (parts.hour === SOURCE_COMPETITOR_IMPORT_HOUR && (parts.minute > 0 || parts.second > 0));
+  const shouldUseNextDay = parts.hour >= SOURCE_COMPETITOR_IMPORT_HOUR;
   const nextDate = addDays(parts.year, parts.month, parts.day, shouldUseNextDay ? 1 : 0);
 
   return createDateForTimeZone(
@@ -145,7 +149,7 @@ function scheduleNextRun() {
   const state = getSchedulerState();
   const now = new Date();
   const nextRunAt = getNextRunAt(now);
-  const delay = Math.max(1_000, nextRunAt.getTime() - now.getTime());
+  const delay = Math.min(MAX_TIMEOUT_MS, Math.max(MIN_DELAY_MS, nextRunAt.getTime() - now.getTime()));
 
   if (state.timer) {
     clearTimeout(state.timer);

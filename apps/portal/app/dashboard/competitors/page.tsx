@@ -3,9 +3,10 @@
 import { Button, Card, Input, Space, Statistic, Table, message } from "antd";
 import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCompetitorSearch } from "@/lib/hooks/use-competitor-search";
 import { t } from "@/lib/i18n";
+import type { SourceCompetitorImportStatus } from "@/lib/source-competitors";
 
 export default function CompetitorsPage() {
   const { filteredRows, loading, refresh, searchInput, setSearchInput } = useCompetitorSearch();
@@ -13,7 +14,7 @@ export default function CompetitorsPage() {
   const [lastImportedAt, setLastImportedAt] = useState<string | null>(null);
   const [messageApi, messageContextHolder] = message.useMessage();
 
-  const loadImportStatus = useCallback(async () => {
+  async function loadImportStatus() {
     const response = await fetch("/api/admin/competitors/import-source", {
       cache: "no-store",
     });
@@ -21,15 +22,16 @@ export default function CompetitorsPage() {
       throw new Error(`Failed to load source import status (${response.status})`);
     }
 
-    const payload = (await response.json()) as { importedAt: string | null };
+    const payload = (await response.json()) as SourceCompetitorImportStatus;
     setLastImportedAt(payload.importedAt);
-  }, []);
+  }
 
   useEffect(() => {
-    loadImportStatus().catch(() => {
+    loadImportStatus().catch((error) => {
+      console.error("Failed to load source competitor import status:", error);
       setLastImportedAt(null);
     });
-  }, [loadImportStatus]);
+  }, []);
 
   const formattedLastImportedAt = useMemo(() => {
     if (!lastImportedAt) {
@@ -48,9 +50,12 @@ export default function CompetitorsPage() {
       if (!response.ok) {
         throw new Error(`Import failed (${response.status})`);
       }
-      const payload = (await response.json()) as { imported: { importedAt: string } };
+      const payload = (await response.json()) as {
+        imported: { importedAt: string };
+        status: SourceCompetitorImportStatus;
+      };
       await refresh();
-      setLastImportedAt(payload.imported.importedAt);
+      setLastImportedAt(payload.status.importedAt);
       messageApi.success(t("competitors.importSuccess"));
     } catch {
       messageApi.error(t("competitors.importError"));

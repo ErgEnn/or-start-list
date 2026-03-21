@@ -13,7 +13,7 @@ export async function register() {
     try {
       await startSourceCompetitorImportScheduler();
     } catch (error) {
-      console.error("Failed to start source competitor scheduler:", error);
+      console.error("Failed to start source competitor scheduler; manual imports remain available:", error);
     }
   }
 }

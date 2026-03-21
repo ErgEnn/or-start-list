@@ -24,6 +24,10 @@ export async function POST() {
     {
       ok: true,
       imported: result,
+      status: {
+        importedAt: result.importedAt,
+        trigger: result.trigger,
+      },
     },
     { status: 200 },
   );
