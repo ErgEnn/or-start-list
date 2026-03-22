@@ -79,6 +79,7 @@ pub fn run() {
             commands::desktop_set_competition_group,
             commands::desktop_create_registration,
             commands::desktop_clear_registration,
+            commands::desktop_update_registration_payment,
             commands::desktop_get_sync_status,
             commands::desktop_get_reserved_codes,
             commands::desktop_claim_reserved_code,

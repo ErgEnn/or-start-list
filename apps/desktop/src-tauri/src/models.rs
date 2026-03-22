@@ -184,6 +184,10 @@ pub struct SelectedRegistrationRow {
     pub course_id: String,
     #[diesel(sql_type = Text)]
     pub competition_group_name: String,
+    #[diesel(sql_type = BigInt)]
+    pub paid_price_cents: i64,
+    #[diesel(sql_type = Text)]
+    pub payment_method: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, QueryableByName)]
@@ -197,10 +201,19 @@ pub struct CompetitionGroupSelectionRow {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SelectedRegistrationInfo {
+    pub course_id: String,
+    pub paid_price_cents: i64,
+    pub payment_method: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopEventState {
     pub selected_event_id: String,
     pub courses: Vec<CourseRow>,
     pub selected_courses_by_competitor: std::collections::HashMap<String, String>,
+    pub selected_registrations_by_competitor: std::collections::HashMap<String, SelectedRegistrationInfo>,
     pub recent_registrations: Vec<RecentRegistrationRow>,
 }
 
@@ -248,6 +261,7 @@ pub struct DesktopCreateRegistrationResponse {
     pub selected_event_id: String,
     pub courses: Vec<CourseRow>,
     pub selected_courses_by_competitor: std::collections::HashMap<String, String>,
+    pub selected_registrations_by_competitor: std::collections::HashMap<String, SelectedRegistrationInfo>,
     pub recent_registrations: Vec<RecentRegistrationRow>,
     pub push_result: Option<PushResponse>,
 }
@@ -257,6 +271,15 @@ pub struct DesktopCreateRegistrationResponse {
 pub struct DesktopClearRegistrationRequest {
     pub event_id: String,
     pub competitor_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopUpdateRegistrationPaymentRequest {
+    pub event_id: String,
+    pub competitor_id: String,
+    pub paid_price_cents: i64,
+    pub payment_method: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

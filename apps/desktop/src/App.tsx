@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import { MainList } from './components/MainList';
 import { Row } from './components/Row';
@@ -49,9 +49,11 @@ export function App() {
     courses,
     competitionGroups,
     selectedCoursesByCompetitor,
+    selectedRegistrationsByCompetitor,
     submittingCompetitorIds,
     selectCompetitionGroupForCompetitor,
     selectCourseForCompetitor,
+    updateRegistrationPayment,
   } = useCompetitorDirectory(deviceConfigRevision);
   const [selectedJumpLetter, setSelectedJumpLetter] = useState<string | null>(null);
   const [focusedCompetitor, setFocusedCompetitor] = useState<{ competitorId: string; token: number } | null>(null);
@@ -116,14 +118,17 @@ export function App() {
   }, [focusedCompetitor]);
 
   const [jumpScrollToken, setJumpScrollToken] = useState(0);
-  const scrollTarget =
-    focusedCompetitor ??
-    (selectedJumpLetter
-      ? {
-          competitorId: jumpTargets.get(selectedJumpLetter) ?? '',
-          token: jumpScrollToken,
-        }
-      : null);
+  const scrollTarget = useMemo(
+    () =>
+      focusedCompetitor ??
+      (selectedJumpLetter
+        ? {
+            competitorId: jumpTargets.get(selectedJumpLetter) ?? '',
+            token: jumpScrollToken,
+          }
+        : null),
+    [focusedCompetitor, selectedJumpLetter, jumpTargets, jumpScrollToken],
+  );
 
   function handleRecentRegistrationClick(competitorId: string) {
     setSelectedFilter(ALL_FILTER_ID);
@@ -156,6 +161,15 @@ export function App() {
     setSelectedEventId(eventId);
     setEventDialogOpen(false);
   }
+
+  const availableLetters = useMemo(() => new Set(jumpTargets.keys()), [jumpTargets]);
+
+  const handleJump = useCallback((letter: string | null) => {
+    setSelectedJumpLetter(letter);
+    if (letter) {
+      setJumpScrollToken(Date.now());
+    }
+  }, []);
 
   return (
     <Box sx={{
@@ -193,12 +207,9 @@ export function App() {
       <FilterBar paymentGroups={paymentGroups} value={selectedFilter} onChange={setSelectedFilter} />
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0, gap: '1em' }}>
         <QuickJumpBar
-          availableLetters={new Set(jumpTargets.keys())}
+          availableLetters={availableLetters}
           selectedLetter={selectedJumpLetter}
-          onJump={(letter) => {
-            setSelectedJumpLetter(letter);
-            setJumpScrollToken(Date.now());
-          }}
+          onJump={handleJump}
         />
         <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
           <MainList
@@ -214,9 +225,11 @@ export function App() {
             courses={courses}
             textScale={textScale}
             selectedCoursesByCompetitor={selectedCoursesByCompetitor}
+            selectedRegistrationsByCompetitor={selectedRegistrationsByCompetitor}
             submittingCompetitorIds={submittingCompetitorIds}
             onSelectCompetitionGroup={selectCompetitionGroupForCompetitor}
             onSelectCourse={selectCourseForCompetitor}
+            onUpdateRegistrationPayment={updateRegistrationPayment}
           />
         </Box>
       </Box>

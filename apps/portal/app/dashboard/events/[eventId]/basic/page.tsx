@@ -24,6 +24,7 @@ export default function EventBasicInfoPage() {
   const eventId = params.eventId;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [formValues, setFormValues] = useState<EventFormValues | null>(null);
   const [form] = Form.useForm<EventFormValues>();
   const [apiMessage, contextHolder] = message.useMessage();
 
@@ -37,10 +38,11 @@ export default function EventBasicInfoPage() {
     }
 
     const payload = (await response.json()) as EventDetailPayload;
-    form.setFieldsValue({
+    const values = {
       name: payload.event.name,
       date: payload.event.startDate ?? "",
-    });
+    };
+    setFormValues(values);
     setLoading(false);
   }
 
@@ -75,12 +77,18 @@ export default function EventBasicInfoPage() {
     loadEvent();
   }, [eventId]);
 
+  useEffect(() => {
+    if (formValues) {
+      form.setFieldsValue(formValues);
+    }
+  }, [formValues]);
+
   return (
     <>
       {contextHolder}
-      <Card loading={loading}>
-        <Space direction="vertical" style={{ width: "100%" }}>
-          <Form form={form} layout="vertical">
+      <Card loading={loading || !formValues}>
+        {formValues && <Space direction="vertical" style={{ width: "100%" }}>
+          <Form form={form} layout="vertical" initialValues={formValues}>
             <Form.Item
               label={t("events.createName")}
               name="name"
@@ -105,7 +113,7 @@ export default function EventBasicInfoPage() {
               {t("events.save")}
             </Button>
           </Space>
-        </Space>
+        </Space>}
       </Card>
     </>
   );

@@ -80,7 +80,7 @@ export function RecentsList({ registrations, loading, onSelectRegistration }: Re
                     </Typography>
                   </Box>
                   <Typography variant='body2' sx={{ textAlign: 'right' }}>
-                    {formatPrice(registration.priceCents)}
+                    {formatPrice(registration.paidPriceCents)}
                   </Typography>
                 </ButtonBase>
               );
@@ -122,7 +122,7 @@ function TotalsLine({ label, value }: { label: string; value: number }) {
 function sumRecent(registrations: DesktopRecentRegistration[], count: number) {
   return registrations
     .slice(0, count)
-    .reduce((total, registration) => total + registration.priceCents, 0);
+    .reduce((total, registration) => total + registration.paidPriceCents, 0);
 }
 
 function formatRegistrationTime(value: string) {

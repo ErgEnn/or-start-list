@@ -8,7 +8,7 @@ import {
   TableHead,
   TableRow,
 } from '@mui/material';
-import type { CompetitionGroup, Course, DesktopCompetitorRow, PaymentGroup } from '@or/shared';
+import type { CompetitionGroup, Course, DesktopCompetitorRow, PaymentGroup, SelectedRegistrationInfo } from '@or/shared';
 import { t } from '../i18n';
 import { CompetitorDetailDialog } from './CompetitorDetailDialog';
 
@@ -25,9 +25,11 @@ type MainListProps = {
   courses: Course[];
   textScale: number;
   selectedCoursesByCompetitor: Record<string, string>;
+  selectedRegistrationsByCompetitor: Record<string, SelectedRegistrationInfo>;
   submittingCompetitorIds: Set<string>;
   onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
   onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: "cash" | "prepaid" | "stebby" | "debt" | "other") => Promise<void>;
+  onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: "cash" | "prepaid" | "stebby" | "debt" | "other") => Promise<void>;
 };
 
 export const MainList = memo(function MainList({
@@ -43,9 +45,11 @@ export const MainList = memo(function MainList({
   courses,
   textScale,
   selectedCoursesByCompetitor,
+  selectedRegistrationsByCompetitor,
   submittingCompetitorIds,
   onSelectCompetitionGroup,
   onSelectCourse,
+  onUpdateRegistrationPayment,
 }: MainListProps) {
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
   const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | null>(null);
@@ -157,9 +161,11 @@ export const MainList = memo(function MainList({
           courseNameById={courseNameById}
           textScale={textScale}
           selectedCourseId={selectedCoursesByCompetitor[selectedCompetitor.competitorId] ?? null}
+          selectedRegistration={selectedRegistrationsByCompetitor[selectedCompetitor.competitorId] ?? null}
           submitting={submittingCompetitorIds.has(selectedCompetitor.competitorId)}
           onSelectCompetitionGroup={onSelectCompetitionGroup}
           onSelectCourse={onSelectCourse}
+          onUpdateRegistrationPayment={onUpdateRegistrationPayment}
           onClose={() => setSelectedCompetitorId(null)}
         />
       ) : null}

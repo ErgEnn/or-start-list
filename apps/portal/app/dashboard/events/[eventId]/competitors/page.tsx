@@ -1,9 +1,11 @@
 "use client";
 
-import { Button, Card, Space, Table, message } from "antd";
+import { Badge, Button, Card, Space, Table, message } from "antd";
 import Paragraph from "antd/es/typography/Paragraph";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { DownloadOutlined } from "@ant-design/icons";
+import * as XLSX from "xlsx";
 import { t } from "@/lib/i18n";
 import { formatEuro } from "@/lib/money";
 
@@ -12,15 +14,10 @@ type EventCompetitorRow = {
   eolNumber: string | null;
   firstName: string | null;
   lastName: string | null;
-  dob: string | null;
-  club: string | null;
-  siCard: string | null;
-  courseId: string;
-  competitionGroupName: string;
   courseName: string | null;
+  price: number | null;
   pricePaid: number | null;
-  deviceId: string;
-  createdAtDevice: string;
+  paymentMethod: string;
 };
 
 type EventDetailPayload = {
@@ -49,6 +46,28 @@ export default function EventCompetitorsPage() {
     setLoading(false);
   }
 
+  function exportExcel() {
+    const data = rows.map((row) => ({
+      [t("events.eolNumber")]: row.eolNumber ?? "",
+      [t("events.firstName")]: row.firstName ?? "",
+      [t("events.lastName")]: row.lastName ?? "",
+      [t("events.selectedCourse")]: row.courseName ?? "",
+      [t("events.price")]: row.price ?? 0,
+      [t("events.pricePaid")]: row.pricePaid ?? 0,
+      [t("events.paymentMethod")]: row.paymentMethod,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Competitors");
+    XLSX.writeFile(wb, `competitors-${eventId}.xlsx`);
+  }
+
+  const totals = useMemo(() => {
+    const totalPrice = rows.reduce((sum, r) => sum + (r.price ?? 0), 0);
+    const totalPaid = rows.reduce((sum, r) => sum + (r.pricePaid ?? 0), 0);
+    return { count: rows.length, totalPrice, totalPaid };
+  }, [rows]);
+
   useEffect(() => {
     loadCompetitors();
   }, [eventId]);
@@ -62,6 +81,9 @@ export default function EventCompetitorsPage() {
           <Space>
             <Button onClick={() => router.push("/dashboard/events")}>{t("events.back")}</Button>
             <Button onClick={loadCompetitors}>{t("events.refresh")}</Button>
+            <Button icon={<DownloadOutlined />} disabled={rows.length === 0} onClick={exportExcel}>
+              {t("events.exportExcel")}
+            </Button>
           </Space>
           <Table
             loading={loading}
@@ -69,30 +91,49 @@ export default function EventCompetitorsPage() {
             dataSource={rows}
             pagination={{ pageSize: 25 }}
             locale={{ emptyText: t("events.competitorsEmpty") }}
-            scroll={{ x: 1440 }}
+            scroll={{ x: 1080 }}
+            summary={() => (
+              <Table.Summary.Row>
+                <Table.Summary.Cell index={0} colSpan={4}>
+                  <strong>{t("events.total")}: {totals.count}</strong>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={4}>
+                  <strong>{formatEuro(totals.totalPrice)}</strong>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={5}>
+                  <strong>{formatEuro(totals.totalPaid)}</strong>
+                </Table.Summary.Cell>
+                <Table.Summary.Cell index={6} colSpan={2} />
+              </Table.Summary.Row>
+            )}
             columns={[
               { title: t("events.eolNumber"), dataIndex: "eolNumber", key: "eolNumber", width: 140 },
               { title: t("events.firstName"), dataIndex: "firstName", key: "firstName", width: 160 },
               { title: t("events.lastName"), dataIndex: "lastName", key: "lastName", width: 160 },
-              { title: t("events.dob"), dataIndex: "dob", key: "dob", width: 140 },
-              { title: t("events.club"), dataIndex: "club", key: "club", width: 180 },
-              { title: t("events.siCard"), dataIndex: "siCard", key: "siCard", width: 140 },
-              { title: "Competition Group", dataIndex: "competitionGroupName", key: "competitionGroupName", width: 180 },
               { title: t("events.selectedCourse"), dataIndex: "courseName", key: "courseName", width: 180 },
+              {
+                title: t("events.price"),
+                dataIndex: "price",
+                key: "price",
+                width: 120,
+                render: (value: number | null) => formatEuro(value),
+              },
               {
                 title: t("events.pricePaid"),
                 dataIndex: "pricePaid",
                 key: "pricePaid",
-                width: 140,
+                width: 120,
                 render: (value: number | null) => formatEuro(value),
               },
-              { title: t("events.deviceId"), dataIndex: "deviceId", key: "deviceId", width: 180 },
+              { title: t("events.paymentMethod"), dataIndex: "paymentMethod", key: "paymentMethod", width: 150 },
               {
-                title: t("events.selectedAt"),
-                dataIndex: "createdAtDevice",
-                key: "createdAtDevice",
-                width: 220,
-                render: (value: string) => new Date(value).toLocaleString(),
+                title: "",
+                key: "paymentStatus",
+                width: 60,
+                render: (_: unknown, row: EventCompetitorRow) =>
+                  row.price === row.pricePaid
+                    ? <Badge status="success" text="OK" />
+                    : <Badge status="warning" text="!" />,
               },
             ]}
           />

@@ -45,10 +45,17 @@ export const desktopQueryCompetitorsResponseSchema = z.object({
   visibleCount: z.number().int().nonnegative(),
 });
 
+export const selectedRegistrationInfoSchema = z.object({
+  courseId: z.string(),
+  paidPriceCents: z.number().int().nonnegative(),
+  paymentMethod: paymentMethodSchema,
+});
+
 export const desktopEventStateSchema = z.object({
   selectedEventId: z.string(),
   courses: z.array(courseSchema),
   selectedCoursesByCompetitor: z.record(z.string()),
+  selectedRegistrationsByCompetitor: z.record(selectedRegistrationInfoSchema),
   recentRegistrations: z.array(desktopRecentRegistrationSchema),
 });
 
@@ -80,6 +87,13 @@ export const desktopClearRegistrationRequestSchema = z.object({
 });
 
 export const desktopClearRegistrationResponseSchema = desktopEventStateSchema;
+
+export const desktopUpdateRegistrationPaymentRequestSchema = z.object({
+  eventId: z.string().min(1),
+  competitorId: z.string().min(1),
+  paidPriceCents: z.number().int().nonnegative(),
+  paymentMethod: paymentMethodSchema,
+});
 
 export const desktopSetCompetitionGroupRequestSchema = z.object({
   eventId: z.string().min(1),
@@ -124,12 +138,14 @@ export type DesktopCompetitorRow = z.infer<typeof desktopCompetitorRowSchema>;
 export type DesktopRecentRegistration = z.infer<typeof desktopRecentRegistrationSchema>;
 export type DesktopQueryCompetitorsRequest = z.infer<typeof desktopQueryCompetitorsRequestSchema>;
 export type DesktopQueryCompetitorsResponse = z.infer<typeof desktopQueryCompetitorsResponseSchema>;
+export type SelectedRegistrationInfo = z.infer<typeof selectedRegistrationInfoSchema>;
 export type DesktopEventState = z.infer<typeof desktopEventStateSchema>;
 export type DesktopBootstrap = z.infer<typeof desktopBootstrapSchema>;
 export type DesktopCreateRegistrationRequest = z.infer<typeof desktopCreateRegistrationRequestSchema>;
 export type DesktopCreateRegistrationResponse = z.infer<typeof desktopCreateRegistrationResponseSchema>;
 export type DesktopClearRegistrationRequest = z.infer<typeof desktopClearRegistrationRequestSchema>;
 export type DesktopClearRegistrationResponse = z.infer<typeof desktopClearRegistrationResponseSchema>;
+export type DesktopUpdateRegistrationPaymentRequest = z.infer<typeof desktopUpdateRegistrationPaymentRequestSchema>;
 export type DesktopSetCompetitionGroupRequest = z.infer<typeof desktopSetCompetitionGroupRequestSchema>;
 export type DesktopClaimReservedCodeRequest = z.infer<typeof desktopClaimReservedCodeRequestSchema>;
 export type DeviceSyncCycleRequest = z.infer<typeof deviceSyncCycleRequestSchema>;

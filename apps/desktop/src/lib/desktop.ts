@@ -21,6 +21,7 @@ import {
   type DesktopQueryCompetitorsResponse,
   type DesktopSetCompetitionGroupRequest,
   type DesktopSyncStatus,
+  type DesktopUpdateRegistrationPaymentRequest,
   type ReservedCode,
 } from "@or/shared";
 
@@ -55,6 +56,14 @@ export async function desktopClearRegistration(
 ): Promise<DesktopClearRegistrationResponse> {
   return desktopClearRegistrationResponseSchema.parse(
     await invoke("desktop_clear_registration", { request }),
+  );
+}
+
+export async function desktopUpdateRegistrationPayment(
+  request: DesktopUpdateRegistrationPaymentRequest,
+): Promise<DesktopCreateRegistrationResponse> {
+  return desktopCreateRegistrationResponseSchema.parse(
+    await invoke("desktop_update_registration_payment", { request }),
   );
 }
 

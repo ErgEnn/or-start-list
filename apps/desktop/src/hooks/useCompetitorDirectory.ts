@@ -7,6 +7,7 @@ import type {
   Event,
   PaymentGroup,
   PaymentMethod,
+  SelectedRegistrationInfo,
 } from "@or/shared";
 import {
   desktopBootstrap,
@@ -15,6 +16,7 @@ import {
   desktopQueryCompetitors,
   desktopSetCompetitionGroup,
   desktopSelectEvent,
+  desktopUpdateRegistrationPayment,
   onDesktopSyncStatus,
 } from "../lib/desktop";
 import type { DesktopCompetitorRow } from "@or/shared";
@@ -43,9 +45,11 @@ type UseCompetitorDirectoryResult = {
   courses: Course[];
   recentRegistrations: DesktopRecentRegistration[];
   selectedCoursesByCompetitor: Record<string, string>;
+  selectedRegistrationsByCompetitor: Record<string, SelectedRegistrationInfo>;
   submittingCompetitorIds: Set<string>;
   selectCompetitionGroupForCompetitor: (competitorId: string, competitionGroupName: string) => Promise<void>;
   selectCourseForCompetitor: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod) => Promise<void>;
+  updateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: PaymentMethod) => Promise<void>;
 };
 
 const EMPTY_SYNC_STATUS: DesktopSyncStatus = {
@@ -73,12 +77,15 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
   const [courses, setCourses] = useState<Course[]>([]);
   const [recentRegistrations, setRecentRegistrations] = useState<DesktopRecentRegistration[]>([]);
   const [selectedCoursesByCompetitor, setSelectedCoursesByCompetitor] = useState<Record<string, string>>({});
+  const [selectedRegistrationsByCompetitor, setSelectedRegistrationsByCompetitor] = useState<Record<string, SelectedRegistrationInfo>>({});
   const [submittingCompetitorIds, setSubmittingCompetitorIds] = useState<Set<string>>(new Set());
   const [lastHydratedSyncAt, setLastHydratedSyncAt] = useState<string | null>(null);
   const latestFilterRef = useRef(selectedFilter);
   const latestSearchQueryRef = useRef(searchQuery);
   const latestSelectedEventIdRef = useRef(selectedEventId);
   const latestSubmittingCompetitorIdsRef = useRef(submittingCompetitorIds);
+  const latestRowsRef = useRef(rows);
+  const latestSelectedCoursesByCompetitorRef = useRef(selectedCoursesByCompetitor);
   const latestCourseSelectionRequestIdsRef = useRef(new Map<string, number>());
   const nextCourseSelectionRequestIdRef = useRef(0);
 
@@ -97,12 +104,14 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     courses: Course[];
     recentRegistrations: DesktopRecentRegistration[];
     selectedCoursesByCompetitor: Record<string, string>;
+    selectedRegistrationsByCompetitor: Record<string, SelectedRegistrationInfo>;
   }) => {
     startTransition(() => {
       setSelectedEventIdState(eventState.selectedEventId);
       setCourses(eventState.courses);
       setRecentRegistrations(eventState.recentRegistrations);
       setSelectedCoursesByCompetitor(eventState.selectedCoursesByCompetitor);
+      setSelectedRegistrationsByCompetitor(eventState.selectedRegistrationsByCompetitor);
     });
   }, []);
 
@@ -117,7 +126,8 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
   }, []);
 
   const selectCompetitionGroupForCompetitor = useCallback(async (competitorId: string, competitionGroupName: string) => {
-    if (!selectedEventId) {
+    const currentEventId = latestSelectedEventIdRef.current;
+    if (!currentEventId) {
       return;
     }
 
@@ -126,7 +136,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
 
     try {
       await desktopSetCompetitionGroup({
-        eventId: selectedEventId,
+        eventId: currentEventId,
         competitorId,
         competitionGroupName,
       });
@@ -140,14 +150,15 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
         return next;
       });
     }
-  }, [refreshQuery, selectedEventId]);
+  }, [refreshQuery]);
 
   const selectCourseForCompetitor = useCallback(async (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod) => {
-    if (!selectedEventId) {
+    const currentEventId = latestSelectedEventIdRef.current;
+    if (!currentEventId) {
       return;
     }
 
-    const previousCourseId = selectedCoursesByCompetitor[competitorId];
+    const previousCourseId = latestSelectedCoursesByCompetitorRef.current[competitorId];
     if (previousCourseId === courseId) {
       return;
     }
@@ -168,10 +179,10 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     latestCourseSelectionRequestIdsRef.current.set(competitorId, requestId);
 
     try {
-      const selectedCompetitionGroupName = rows.find((row) => row.competitorId === competitorId)?.selectedCompetitionGroupName;
+      const selectedCompetitionGroupName = latestRowsRef.current.find((row) => row.competitorId === competitorId)?.selectedCompetitionGroupName;
       const response = courseId
         ? await desktopCreateRegistration({
-            eventId: selectedEventId,
+            eventId: currentEventId,
             competitorId,
             courseId,
             competitionGroupName: selectedCompetitionGroupName ?? "",
@@ -179,7 +190,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
             paymentMethod: paymentMethod ?? "cash",
           })
         : await desktopClearRegistration({
-            eventId: selectedEventId,
+            eventId: currentEventId,
             competitorId,
           });
 
@@ -191,6 +202,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
         startTransition(() => {
           setCourses(response.courses);
           setRecentRegistrations(response.recentRegistrations);
+          setSelectedRegistrationsByCompetitor(response.selectedRegistrationsByCompetitor);
           setSelectedCoursesByCompetitor((current) => {
             const nextSelections = { ...response.selectedCoursesByCompetitor };
             for (const pendingCompetitorId of latestSubmittingCompetitorIdsRef.current) {
@@ -230,7 +242,43 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
         return next;
       });
     }
-  }, [rows, scheduleRefreshQuery, selectedCoursesByCompetitor, selectedEventId]);
+  }, [scheduleRefreshQuery]);
+
+  const updateRegistrationPayment = useCallback(async (competitorId: string, paidPriceCents: number, paymentMethod: PaymentMethod) => {
+    const currentEventId = latestSelectedEventIdRef.current;
+    if (!currentEventId) {
+      return;
+    }
+
+    setSubmittingCompetitorIds((current) => new Set(current).add(competitorId));
+    setError("");
+
+    try {
+      const response = await desktopUpdateRegistrationPayment({
+        eventId: currentEventId,
+        competitorId,
+        paidPriceCents,
+        paymentMethod,
+      });
+
+      if (latestSelectedEventIdRef.current === response.selectedEventId) {
+        startTransition(() => {
+          setCourses(response.courses);
+          setRecentRegistrations(response.recentRegistrations);
+          setSelectedCoursesByCompetitor(response.selectedCoursesByCompetitor);
+          setSelectedRegistrationsByCompetitor(response.selectedRegistrationsByCompetitor);
+        });
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('failed_save_course_selection'));
+    } finally {
+      setSubmittingCompetitorIds((current) => {
+        const next = new Set(current);
+        next.delete(competitorId);
+        return next;
+      });
+    }
+  }, []);
 
   useEffect(() => {
     latestFilterRef.current = selectedFilter;
@@ -247,6 +295,14 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
   useEffect(() => {
     latestSubmittingCompetitorIdsRef.current = submittingCompetitorIds;
   }, [submittingCompetitorIds]);
+
+  useEffect(() => {
+    latestRowsRef.current = rows;
+  }, [rows]);
+
+  useEffect(() => {
+    latestSelectedCoursesByCompetitorRef.current = selectedCoursesByCompetitor;
+  }, [selectedCoursesByCompetitor]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => setSearchQuery(searchInput), 250);
@@ -408,9 +464,11 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     courses,
     recentRegistrations,
     selectedCoursesByCompetitor,
+    selectedRegistrationsByCompetitor,
     submittingCompetitorIds,
     selectCompetitionGroupForCompetitor,
     selectCourseForCompetitor,
+    updateRegistrationPayment,
   };
 }
 

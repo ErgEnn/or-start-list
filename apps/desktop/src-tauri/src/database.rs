@@ -15,11 +15,12 @@ use crate::models::{
     BaseCompetitorRow, CompetitionGroupPayload, CompetitionGroupRow, CompetitionGroupSelectionRow,
     ConfigRow, ConfigValueRow, CountRow, DesktopClaimReservedCodeRequest, DesktopCreateRegistrationRequest,
     DesktopCreateRegistrationResponse, DesktopClearRegistrationRequest, DesktopEventState,
+    DesktopUpdateRegistrationPaymentRequest,
     DesktopQueryCompetitorsRequest, DesktopQueryCompetitorsResponse, DesktopSetCompetitionGroupRequest,
     DesktopSyncStatus, EventRow, EventVersionRow, OutboxItem, OutboxRow, PaymentGroupMemberPayload,
     PaymentGroupMemberRow, PaymentGroupPayload, PaymentGroupRow, RecentRegistrationRow,
     RegistrationClearedPayload, RegistrationPayload, ReservedCodeClaimedPayload, ReservedCodePayload,
-    ReservedCodeRow, SelectedRegistrationRow, SyncMetaRow,
+    ReservedCodeRow, SelectedRegistrationInfo, SelectedRegistrationRow, SyncMetaRow,
     TableColumnRow, API_KEY_KEY, DEVICE_ID_KEY, PORTAL_BASE_URL_KEY, SELECTED_EVENT_KEY,
     SYNC_STATUS_EVENT,
 };
@@ -379,7 +380,7 @@ fn load_latest_registrations(
     }
 
     let rows = sql_query(
-        "SELECT r.competitor_id, r.course_id, r.competition_group_name \
+        "SELECT r.competitor_id, r.course_id, r.competition_group_name, r.paid_price_cents, r.payment_method \
          FROM registrations r \
          INNER JOIN ( \
            SELECT competitor_id, MAX(local_seq) AS max_seq \
@@ -408,6 +409,20 @@ pub fn load_selected_courses(
     Ok(load_latest_registrations(db, event_id)?
         .into_iter()
         .map(|(competitor_id, row)| (competitor_id, row.course_id))
+        .collect())
+}
+
+fn load_selected_registrations(
+    db: &mut SqliteConnection,
+    event_id: &str,
+) -> Result<HashMap<String, SelectedRegistrationInfo>, String> {
+    Ok(load_latest_registrations(db, event_id)?
+        .into_iter()
+        .map(|(competitor_id, row)| (competitor_id, SelectedRegistrationInfo {
+            course_id: row.course_id,
+            paid_price_cents: row.paid_price_cents,
+            payment_method: row.payment_method,
+        }))
         .collect())
 }
 
@@ -473,6 +488,7 @@ pub fn load_event_state(db: &mut SqliteConnection, selected_event_id: &str) -> R
         selected_event_id: selected_event_id.to_string(),
         courses: load_courses(db, selected_event_id)?,
         selected_courses_by_competitor: load_selected_courses(db, selected_event_id)?,
+        selected_registrations_by_competitor: load_selected_registrations(db, selected_event_id)?,
         recent_registrations: load_recent_registrations(db, selected_event_id, 20)?,
     })
 }
@@ -1036,6 +1052,7 @@ pub fn claim_reserved_code(
         selected_event_id: request.event_id.clone(),
         courses: load_courses(db, &request.event_id)?,
         selected_courses_by_competitor: load_selected_courses(db, &request.event_id)?,
+        selected_registrations_by_competitor: load_selected_registrations(db, &request.event_id)?,
         recent_registrations: load_recent_registrations(db, &request.event_id, 20)?,
         push_result: None,
     })
@@ -1150,6 +1167,222 @@ pub fn create_registration(
         selected_event_id: request.event_id.clone(),
         courses: load_courses(db, &request.event_id)?,
         selected_courses_by_competitor: load_selected_courses(db, &request.event_id)?,
+        selected_registrations_by_competitor: load_selected_registrations(db, &request.event_id)?,
+        recent_registrations: load_recent_registrations(db, &request.event_id, 20)?,
+        push_result: None,
+    })
+}
+
+pub fn update_registration_payment(
+    db: &mut SqliteConnection,
+    request: DesktopUpdateRegistrationPaymentRequest,
+) -> Result<DesktopCreateRegistrationResponse, String> {
+    let latest_registrations = load_latest_registrations(db, &request.event_id)?;
+    let existing = latest_registrations
+        .get(&request.competitor_id)
+        .ok_or_else(|| "No existing registration found for this competitor.".to_string())?;
+
+    // Check if the latest registration's outbox entry is still pending
+    let pending_outbox_count = sql_query(
+        "SELECT COUNT(*) AS count \
+         FROM registrations r \
+         INNER JOIN outbox o \
+           ON o.local_seq = r.local_seq \
+          AND o.item_type = 'registration_created' \
+          AND o.status = 'pending' \
+         WHERE r.event_id = ? AND r.competitor_id = ? \
+         ORDER BY r.local_seq DESC LIMIT 1",
+    )
+    .bind::<Text, _>(&request.event_id)
+    .bind::<Text, _>(&request.competitor_id)
+    .get_result::<CountRow>(db)
+    .map_err(|error| error.to_string())?
+    .count;
+
+    if pending_outbox_count > 0 {
+        // Outbox entry still pending — update in place
+        db.transaction::<(), diesel::result::Error, _>(|connection| {
+            // Update registration row
+            sql_query(
+                "UPDATE registrations \
+                 SET paid_price_cents = ?, payment_method = ? \
+                 WHERE rowid = ( \
+                   SELECT r.rowid FROM registrations r \
+                   WHERE r.event_id = ? AND r.competitor_id = ? \
+                   ORDER BY r.local_seq DESC LIMIT 1 \
+                 )",
+            )
+            .bind::<BigInt, _>(request.paid_price_cents)
+            .bind::<Text, _>(&request.payment_method)
+            .bind::<Text, _>(&request.event_id)
+            .bind::<Text, _>(&request.competitor_id)
+            .execute(connection)?;
+
+            // Update outbox payload
+            let latest_seq = sql_query(
+                "SELECT MAX(local_seq) AS count FROM registrations WHERE event_id = ? AND competitor_id = ?",
+            )
+            .bind::<Text, _>(&request.event_id)
+            .bind::<Text, _>(&request.competitor_id)
+            .get_result::<CountRow>(connection)?
+            .count;
+
+            let outbox_rows = sql_query(
+                "SELECT payload, created_at, status, item_type, local_seq \
+                 FROM outbox \
+                 WHERE local_seq = ? AND item_type = 'registration_created' AND status = 'pending'",
+            )
+            .bind::<BigInt, _>(latest_seq)
+            .load::<OutboxRow>(connection)?;
+
+            if let Some(outbox_row) = outbox_rows.into_iter().next() {
+                if let Ok(mut payload) = serde_json::from_str::<serde_json::Value>(&outbox_row.payload) {
+                    if let Some(obj) = payload.as_object_mut() {
+                        obj.insert("paidPriceCents".to_string(), serde_json::json!(request.paid_price_cents));
+                        obj.insert("paymentMethod".to_string(), serde_json::json!(&request.payment_method));
+                    }
+                    let updated_payload = serde_json::to_string(&payload)
+                        .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
+                    sql_query("UPDATE outbox SET payload = ? WHERE local_seq = ?")
+                        .bind::<Text, _>(&updated_payload)
+                        .bind::<BigInt, _>(latest_seq)
+                        .execute(connection)?;
+                }
+            }
+
+            Ok(())
+        })
+        .map_err(|error| error.to_string())?;
+    } else {
+        // Already synced — clear on server and re-create with updated payment
+        let created_at = now_iso()?;
+
+        let config = load_device_config_map(db)?;
+        let device_id = config
+            .get(DEVICE_ID_KEY)
+            .cloned()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                config
+                    .get(API_KEY_KEY)
+                    .cloned()
+                    .filter(|value| !value.trim().is_empty())
+            })
+            .unwrap_or_else(|| "desktop-local".to_string());
+
+        let payment_groups = load_payment_groups(db)?;
+        let competition_groups = load_competition_groups(db)?;
+        let price_cents = find_effective_price(
+            &request.competitor_id,
+            &existing.competition_group_name,
+            &competition_groups,
+            &payment_groups,
+        )
+        .ok_or_else(|| "Competition group price could not be resolved.".to_string())?;
+
+        let new_registration_id = Uuid::new_v4().to_string();
+
+        db.transaction::<(), diesel::result::Error, _>(|connection| {
+            let clear_seq = sql_query(
+                "SELECT COALESCE(MAX(local_seq), 0) + 1 AS count \
+                 FROM ( \
+                   SELECT local_seq FROM outbox \
+                   UNION ALL \
+                   SELECT local_seq FROM registrations \
+                 )",
+            )
+            .get_result::<CountRow>(connection)?
+            .count;
+
+            // Insert registration_cleared outbox entry
+            let clear_payload = serde_json::to_string(&RegistrationClearedPayload {
+                event_id: request.event_id.clone(),
+                competitor_id: request.competitor_id.clone(),
+                created_at_device: created_at.clone(),
+                local_seq: clear_seq,
+            })
+            .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
+
+            sql_query(
+                "INSERT INTO outbox(local_seq, item_type, payload, created_at, status) VALUES (?, ?, ?, ?, 'pending')",
+            )
+            .bind::<BigInt, _>(clear_seq)
+            .bind::<Text, _>("registration_cleared")
+            .bind::<Text, _>(clear_payload)
+            .bind::<Text, _>(&created_at)
+            .execute(connection)?;
+
+            let create_seq = clear_seq + 1;
+
+            // Delete old local registration rows and their outbox entries
+            sql_query(
+                "DELETE FROM outbox \
+                 WHERE local_seq IN ( \
+                   SELECT local_seq FROM registrations WHERE event_id = ? AND competitor_id = ? \
+                 )",
+            )
+            .bind::<Text, _>(&request.event_id)
+            .bind::<Text, _>(&request.competitor_id)
+            .execute(connection)?;
+
+            sql_query("DELETE FROM registrations WHERE event_id = ? AND competitor_id = ?")
+                .bind::<Text, _>(&request.event_id)
+                .bind::<Text, _>(&request.competitor_id)
+                .execute(connection)?;
+
+            // Insert new registration row
+            sql_query(
+                "INSERT INTO registrations(registration_id, device_id, event_id, competitor_id, course_id, competition_group_name, price_cents, paid_price_cents, payment_method, created_at_device, local_seq) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind::<Text, _>(&new_registration_id)
+            .bind::<Text, _>(&device_id)
+            .bind::<Text, _>(&request.event_id)
+            .bind::<Text, _>(&request.competitor_id)
+            .bind::<Text, _>(&existing.course_id)
+            .bind::<Text, _>(&existing.competition_group_name)
+            .bind::<BigInt, _>(price_cents)
+            .bind::<BigInt, _>(request.paid_price_cents)
+            .bind::<Text, _>(&request.payment_method)
+            .bind::<Text, _>(&created_at)
+            .bind::<BigInt, _>(create_seq)
+            .execute(connection)?;
+
+            // Insert registration_created outbox entry
+            let create_payload = serde_json::to_string(&RegistrationPayload {
+                registration_id: new_registration_id.clone(),
+                device_id: device_id.clone(),
+                event_id: request.event_id.clone(),
+                competitor_id: request.competitor_id.clone(),
+                course_id: existing.course_id.clone(),
+                competition_group_name: existing.competition_group_name.clone(),
+                price_cents,
+                paid_price_cents: request.paid_price_cents,
+                payment_method: request.payment_method.clone(),
+                created_at_device: created_at.clone(),
+                local_seq: create_seq,
+            })
+            .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
+
+            sql_query(
+                "INSERT INTO outbox(local_seq, item_type, payload, created_at, status) VALUES (?, ?, ?, ?, 'pending')",
+            )
+            .bind::<BigInt, _>(create_seq)
+            .bind::<Text, _>("registration_created")
+            .bind::<Text, _>(create_payload)
+            .bind::<Text, _>(&created_at)
+            .execute(connection)?;
+
+            Ok(())
+        })
+        .map_err(|error| error.to_string())?;
+    }
+
+    Ok(DesktopCreateRegistrationResponse {
+        selected_event_id: request.event_id.clone(),
+        courses: load_courses(db, &request.event_id)?,
+        selected_courses_by_competitor: load_selected_courses(db, &request.event_id)?,
+        selected_registrations_by_competitor: load_selected_registrations(db, &request.event_id)?,
         recent_registrations: load_recent_registrations(db, &request.event_id, 20)?,
         push_result: None,
     })

@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { competitors, events } from "@/lib/db/schema";
+import { events, registrations } from "@/lib/db/schema";
 import { requireAdminSession } from "@/lib/session";
 
 type CreateEventBody = {
@@ -49,10 +49,10 @@ export async function GET() {
       name: events.name,
       startDate: events.startDate,
       createdAt: events.createdAt,
-      competitorsCount: sql<number>`cast(count(${competitors.competitorId}) as int)`,
+      competitorsCount: sql<number>`cast(count(${registrations.registrationId}) as int)`,
     })
     .from(events)
-    .leftJoin(competitors, eq(competitors.eventId, events.eventId))
+    .leftJoin(registrations, eq(registrations.eventId, events.eventId))
     .groupBy(events.eventId, events.name, events.startDate, events.createdAt)
     .orderBy(asc(events.startDate), asc(events.name));
 

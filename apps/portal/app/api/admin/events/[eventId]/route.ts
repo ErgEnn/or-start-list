@@ -63,7 +63,9 @@ export async function GET(_: NextRequest, context: { params: Promise<{ eventId: 
       courseId: registrations.courseId,
       competitionGroupName: registrations.competitionGroupName,
       courseName: courses.name,
-      pricePaid: registrations.priceCents,
+      price: registrations.priceCents,
+      pricePaid: registrations.paidPriceCents,
+      paymentMethod: registrations.paymentMethod,
       deviceId: registrations.deviceId,
       createdAtDevice: registrations.createdAtDevice,
     })
@@ -92,6 +94,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ eventId: 
 
   const competitorRows = eventCompetitors.map((row) => ({
     ...row,
+    price: moneyFromDb(row.price),
     pricePaid: moneyFromDb(row.pricePaid),
   }));
 

@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "OR Start List",
+        "title": "Stardinimekiri",
         "width": 1080,
         "height": 1920,
         "resizable": true

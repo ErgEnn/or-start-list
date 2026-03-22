@@ -169,7 +169,7 @@ export default function EventsPage() {
               title: t("events.actions"),
               key: "actions",
               width: 120,
-              render: (_, row: EventRow) => <Link href={`/dashboard/events/${encodeURIComponent(row.eventId)}/basic`}>{t("events.edit")}</Link>,
+              render: (_, row: EventRow) => <Link href={`/dashboard/events/${encodeURIComponent(row.eventId)}/basic`}>{t("events.view")}</Link>,
             },
           ]}
         />

@@ -16,7 +16,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
-import type { CompetitionGroup, Course, DesktopCompetitorRow, PaymentMethod } from '@or/shared';
+import type { CompetitionGroup, Course, DesktopCompetitorRow, PaymentMethod, SelectedRegistrationInfo } from '@or/shared';
 import { t } from '../i18n';
 
 type CompetitorDetailDialogProps = {
@@ -26,9 +26,11 @@ type CompetitorDetailDialogProps = {
   courseNameById: Map<string, string>;
   textScale: number;
   selectedCourseId: string | null;
+  selectedRegistration: SelectedRegistrationInfo | null;
   submitting: boolean;
   onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
   onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod) => Promise<void>;
+  onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: PaymentMethod) => Promise<void>;
   onClose: () => void;
 };
 
@@ -63,9 +65,11 @@ export function CompetitorDetailDialog({
   courseNameById,
   textScale,
   selectedCourseId,
+  selectedRegistration,
   submitting,
   onSelectCompetitionGroup,
   onSelectCourse,
+  onUpdateRegistrationPayment,
   onClose,
 }: CompetitorDetailDialogProps) {
   const genderMissing = !competitor.gender;
@@ -75,9 +79,13 @@ export function CompetitorDetailDialog({
   const [localDob, setLocalDob] = useState<string>(competitor.dob ?? '');
   const [localCompetitionGroup, setLocalCompetitionGroup] = useState(competitor.selectedCompetitionGroupName);
   const [localCourseId, setLocalCourseId] = useState(selectedCourseId);
-  const [localPaymentMethod, setLocalPaymentMethod] = useState<PaymentMethod>('cash');
-  const [localPaidPriceInput, setLocalPaidPriceInput] = useState('');
-  const [useCustomPrice, setUseCustomPrice] = useState(false);
+  const initialPaymentMethod = selectedRegistration?.paymentMethod ?? 'cash';
+  const initialPaidPriceCents = selectedRegistration?.paidPriceCents ?? (competitor.priceCents ?? 0);
+  const initialIsCustomPrice = selectedRegistration != null && selectedRegistration.paidPriceCents !== (competitor.priceCents ?? 0);
+
+  const [localPaymentMethod, setLocalPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod);
+  const [localPaidPriceInput, setLocalPaidPriceInput] = useState(initialIsCustomPrice ? (initialPaidPriceCents / 100).toFixed(2) : '');
+  const [useCustomPrice, setUseCustomPrice] = useState(initialIsCustomPrice);
 
   const eligibleGroups = useMemo(
     () => getEligibleGroups(localGender || null, localDob || null, allCompetitionGroups),
@@ -86,11 +94,12 @@ export function CompetitorDetailDialog({
 
   const competitionGroupChanged = localCompetitionGroup !== competitor.selectedCompetitionGroupName;
   const courseChanged = localCourseId !== selectedCourseId;
-  const hasChanges = competitionGroupChanged || courseChanged;
-
+  const paymentMethodChanged = localPaymentMethod !== initialPaymentMethod;
   const effectivePaidPriceCents = useCustomPrice
     ? Math.round((Number.parseFloat(localPaidPriceInput) || 0) * 100)
     : (competitor.priceCents ?? 0);
+  const priceChanged = effectivePaidPriceCents !== initialPaidPriceCents;
+  const hasChanges = competitionGroupChanged || courseChanged || paymentMethodChanged || priceChanged;
 
   const scaledFontSize = `${textScale}rem`;
 
@@ -100,6 +109,8 @@ export function CompetitorDetailDialog({
     }
     if (courseChanged) {
       await onSelectCourse(competitor.competitorId, localCourseId, effectivePaidPriceCents, localPaymentMethod);
+    } else if (paymentMethodChanged || priceChanged) {
+      await onUpdateRegistrationPayment(competitor.competitorId, effectivePaidPriceCents, localPaymentMethod);
     }
     onClose();
   }

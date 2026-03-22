@@ -7,11 +7,12 @@ use crate::database::{
     load_available_reserved_codes, load_competition_groups, load_device_config_map, load_event_state,
     load_events, load_payment_groups, load_sync_status_from_db, query_competitors,
     refresh_in_memory_sync_status, save_competition_group_selection, select_startup_event_id,
-    upsert_device_config_value, AppState,
+    update_registration_payment, upsert_device_config_value, AppState,
 };
 use crate::models::{
     DesktopBootstrapResponse, DesktopClaimReservedCodeRequest, DesktopClearRegistrationRequest,
     DesktopCreateRegistrationRequest, DesktopCreateRegistrationResponse, DesktopEventState,
+    DesktopUpdateRegistrationPaymentRequest,
     DesktopQueryCompetitorsRequest, DesktopQueryCompetitorsResponse,
     DesktopSetCompetitionGroupRequest, DesktopSyncStatus, ReservedCodePayload, SELECTED_EVENT_KEY,
 };
@@ -108,6 +109,25 @@ pub fn desktop_clear_registration(
     let response = clear_registration(&mut db, request)?;
     let status = load_sync_status_from_db(&mut db)?;
     emit_sync_status(&app, status)?;
+    Ok(response)
+}
+
+#[tauri::command]
+pub async fn desktop_update_registration_payment(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: DesktopUpdateRegistrationPaymentRequest,
+) -> Result<DesktopCreateRegistrationResponse, String> {
+    let mut db = conn(&state)?;
+    let response = update_registration_payment(&mut db, request)?;
+    let status = load_sync_status_from_db(&mut db)?;
+    emit_sync_status(&app, status)?;
+    tauri::async_runtime::spawn({
+        let app_handle = app.clone();
+        async move {
+            let _ = crate::sync::run_sync_cycle(&app_handle).await;
+        }
+    });
     Ok(response)
 }
 

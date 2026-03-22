@@ -12,6 +12,7 @@
     "dev:desktop": "pnpm --filter @or/desktop tauri:dev",
     "db:push:portal": "pnpm --filter @or/portal db:push",
     "build": "pnpm -r build",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "db:reset:desktop": "rm -f ~/.local/share/ee.or.startlist.desktop/or_start_list.sqlite"
   }
 }
