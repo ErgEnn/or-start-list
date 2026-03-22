@@ -167,6 +167,10 @@ pub struct RecentRegistrationRow {
     pub competition_group_name: String,
     #[diesel(sql_type = BigInt)]
     pub price_cents: i64,
+    #[diesel(sql_type = BigInt)]
+    pub paid_price_cents: i64,
+    #[diesel(sql_type = Text)]
+    pub payment_method: String,
     #[diesel(sql_type = Text)]
     pub created_at_device: String,
 }
@@ -234,6 +238,8 @@ pub struct DesktopCreateRegistrationRequest {
     pub competitor_id: String,
     pub course_id: String,
     pub competition_group_name: String,
+    pub paid_price_cents: i64,
+    pub payment_method: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -318,6 +324,8 @@ pub struct RegistrationPayload {
     pub course_id: String,
     pub competition_group_name: String,
     pub price_cents: i64,
+    pub paid_price_cents: i64,
+    pub payment_method: String,
     pub created_at_device: String,
     pub local_seq: i64,
 }

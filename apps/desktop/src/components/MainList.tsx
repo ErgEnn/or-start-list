@@ -27,7 +27,7 @@ type MainListProps = {
   selectedCoursesByCompetitor: Record<string, string>;
   submittingCompetitorIds: Set<string>;
   onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
-  onSelectCourse: (competitorId: string, courseId: string | null) => Promise<void>;
+  onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: "cash" | "prepaid" | "stebby" | "debt" | "other") => Promise<void>;
 };
 
 export const MainList = memo(function MainList({

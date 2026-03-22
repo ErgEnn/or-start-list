@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "tauri:dev": "tauri dev",
+    "tauri:dev": "WEBKIT_DISABLE_DMABUF_RENDERER=1 tauri dev",
     "tauri:build": "tauri build"
   },
   "dependencies": {

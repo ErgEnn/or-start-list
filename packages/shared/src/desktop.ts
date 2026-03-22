@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { competitionGroupSchema, competitorSchema, courseSchema, eventSchema, paymentGroupSchema, reservedCodeSchema } from "./domain";
+import { competitionGroupSchema, competitorSchema, courseSchema, eventSchema, paymentGroupSchema, paymentMethodSchema, reservedCodeSchema } from "./domain";
 import { competitorDeltaResponseSchema, outboxItemSchema, pullResponseSchema, pushResponseSchema } from "./sync";
 
 export const desktopSyncStatusSchema = z.object({
@@ -28,6 +28,8 @@ export const desktopRecentRegistrationSchema = z.object({
   courseName: z.string().min(1),
   competitionGroupName: z.string().min(1),
   priceCents: z.number().int().nonnegative(),
+  paidPriceCents: z.number().int().nonnegative(),
+  paymentMethod: paymentMethodSchema,
   createdAtDevice: z.string().datetime(),
 });
 
@@ -64,6 +66,8 @@ export const desktopCreateRegistrationRequestSchema = z.object({
   competitorId: z.string().min(1),
   courseId: z.string().min(1),
   competitionGroupName: z.string().min(1),
+  paidPriceCents: z.number().int().nonnegative(),
+  paymentMethod: paymentMethodSchema,
 });
 
 export const desktopCreateRegistrationResponseSchema = desktopEventStateSchema.extend({

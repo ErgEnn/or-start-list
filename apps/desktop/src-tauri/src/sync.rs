@@ -469,9 +469,14 @@ pub async fn run_sync_cycle(app: &AppHandle) -> Result<(), String> {
 }
 
 pub async fn sync_loop(app: AppHandle) {
-    let mut last_full_cycle = Instant::now()
-        .checked_sub(Duration::from_secs(60))
-        .unwrap_or_else(Instant::now);
+    // Run an initial sync immediately on startup
+    info!("Running initial sync on startup");
+    match run_sync_cycle(&app).await {
+        Ok(()) => info!("Initial sync completed successfully"),
+        Err(error) => warn!("Initial sync failed: {}", error),
+    }
+
+    let mut last_full_cycle = Instant::now();
     let mut failure_count = 0u32;
 
     loop {

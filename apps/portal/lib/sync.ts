@@ -34,6 +34,8 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
           courseId: payload.courseId,
           competitionGroupName: payload.competitionGroupName,
           priceCents: toMoneyDb(payload.priceCents / 100),
+          paidPriceCents: toMoneyDb(payload.paidPriceCents / 100),
+          paymentMethod: payload.paymentMethod,
           createdAtDevice: new Date(payload.createdAtDevice),
           localSeq: payload.localSeq,
         })
@@ -232,6 +234,8 @@ export async function loadEventDataset(
         courseId: registrations.courseId,
         competitionGroupName: registrations.competitionGroupName,
         priceCents: registrations.priceCents,
+        paidPriceCents: registrations.paidPriceCents,
+        paymentMethod: registrations.paymentMethod,
         createdAtDevice: registrations.createdAtDevice,
         localSeq: registrations.localSeq,
       })
@@ -265,6 +269,8 @@ export async function loadEventDataset(
         ...item,
         competitionGroupName: item.competitionGroupName,
         priceCents: Math.round((moneyFromDb(item.priceCents) ?? 0) * 100),
+        paidPriceCents: Math.round((moneyFromDb(item.paidPriceCents) ?? 0) * 100),
+        paymentMethod: item.paymentMethod ?? "cash",
         createdAtDevice: new Date(item.createdAtDevice).toISOString(),
       })),
     },

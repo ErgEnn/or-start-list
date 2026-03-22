@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import SettingsIcon from "@mui/icons-material/Settings";
 import SyncIcon from "@mui/icons-material/Sync";
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Alert,
   Box,
   Button,
@@ -9,7 +13,6 @@ import {
   Dialog,
   DialogActions,
   DialogContent,
-  Divider,
   DialogTitle,
   Slider,
   Stack,
@@ -142,25 +145,6 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
               </Box>
             ) : (
               <>
-                <TextField
-                  autoFocus={!portalBaseUrlLocked}
-                  fullWidth
-                  label={t('portal_url')}
-                  value={portalBaseUrl}
-                  onChange={(event) => setPortalBaseUrl(event.target.value)}
-                  placeholder="http://localhost:3000"
-                  disabled={portalBaseUrlLocked}
-                  helperText={portalBaseUrlLocked ? t('settings_locked_helper') : undefined}
-                />
-                <TextField
-                  fullWidth
-                  label={t('api_key')}
-                  value={apiKey}
-                  onChange={(event) => setApiKey(event.target.value)}
-                  autoComplete="off"
-                  disabled={apiKeyLocked}
-                  helperText={apiKeyLocked ? t('settings_locked_helper') : undefined}
-                />
                 <Box>
                   <Typography gutterBottom>
                     {t('text_size')}: {textScale.toFixed(1)}x
@@ -180,25 +164,53 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
                     }}
                   />
                 </Box>
-                <Divider />
-                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  <Button
-                    variant="outlined"
-                    startIcon={syncing ? <CircularProgress size={16} /> : <SyncIcon />}
-                    onClick={() => void handleForceSync()}
-                    disabled={syncing}
-                  >
-                    {t("force_sync")}
-                  </Button>
-                  {syncMessage ? (
-                    <Typography variant="body2" sx={{ color: syncMessage === t("force_sync_success") ? "success.main" : "error.main" }}>
-                      {syncMessage}
-                    </Typography>
-                  ) : null}
-                </Box>
-                <Typography variant="caption" sx={{ color: "text.disabled" }}>
-                  Build: #{__BUILD_NUMBER__}
-                </Typography>
+                <Accordion defaultExpanded={false} disableGutters sx={{ boxShadow: 'none', '&::before': { display: 'none' } }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 0 }}>
+                    <Typography>{t('system_settings')}</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 0 }}>
+                    <Stack spacing={2}>
+                      <TextField
+                        autoFocus={!portalBaseUrlLocked}
+                        fullWidth
+                        label={t('portal_url')}
+                        value={portalBaseUrl}
+                        onChange={(event) => setPortalBaseUrl(event.target.value)}
+                        placeholder="http://localhost:3000"
+                        disabled={portalBaseUrlLocked}
+                        helperText={portalBaseUrlLocked ? t('settings_locked_helper') : undefined}
+                      />
+                      <TextField
+                        fullWidth
+                        type="password"
+                        label={t('api_key')}
+                        value={apiKey}
+                        onChange={(event) => setApiKey(event.target.value)}
+                        autoComplete="off"
+                        disabled={apiKeyLocked}
+                        helperText={apiKeyLocked ? t('settings_locked_helper') : undefined}
+                      />
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                        <Button
+                          variant="outlined"
+                          startIcon={syncing ? <CircularProgress size={16} /> : <SyncIcon />}
+                          onClick={() => void handleForceSync()}
+                          disabled={syncing}
+                        >
+                          {t("force_sync")}
+                        </Button>
+                        {syncMessage ? (
+                          <Typography variant="body2" sx={{ color: syncMessage === t("force_sync_success") ? "success.main" : "error.main" }}>
+                            {syncMessage}
+                          </Typography>
+                        ) : null}
+                      </Box>
+                      <Typography variant="caption" sx={{ color: "text.disabled" }}>
+                        Build: #{__BUILD_NUMBER__}
+                      </Typography>
+                    </Stack>
+                  </AccordionDetails>
+                </Accordion>
               </>
             )}
           </Stack>

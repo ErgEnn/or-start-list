@@ -4,6 +4,7 @@ import { parseEolXml } from "@or/eol-import";
 import { withTransaction } from "@/lib/db";
 import { classes, competitors, events } from "@/lib/db/schema";
 import { requireAdminSession } from "@/lib/session";
+import { upsertSourceCompetitorImport } from "@/lib/source-competitors";
 
 export async function POST(request: NextRequest) {
   const unauthorized = await requireAdminSession();
@@ -79,6 +80,20 @@ export async function POST(request: NextRequest) {
           },
         });
     }
+
+    await upsertSourceCompetitorImport(
+      tx,
+      parsed.competitors.map((c) => ({
+        competitorId: c.competitorId,
+        eolNumber: c.eolNumber,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        gender: c.gender ?? undefined,
+        dob: c.dob,
+        club: c.club,
+        siCard: c.siCard,
+      })),
+    );
 
     await tx.execute(sql`
       INSERT INTO event_snapshot_versions (event_id, version, generated_at)

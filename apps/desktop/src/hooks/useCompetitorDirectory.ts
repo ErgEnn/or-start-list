@@ -6,6 +6,7 @@ import type {
   DesktopSyncStatus,
   Event,
   PaymentGroup,
+  PaymentMethod,
 } from "@or/shared";
 import {
   desktopBootstrap,
@@ -44,7 +45,7 @@ type UseCompetitorDirectoryResult = {
   selectedCoursesByCompetitor: Record<string, string>;
   submittingCompetitorIds: Set<string>;
   selectCompetitionGroupForCompetitor: (competitorId: string, competitionGroupName: string) => Promise<void>;
-  selectCourseForCompetitor: (competitorId: string, courseId: string | null) => Promise<void>;
+  selectCourseForCompetitor: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod) => Promise<void>;
 };
 
 const EMPTY_SYNC_STATUS: DesktopSyncStatus = {
@@ -141,7 +142,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     }
   }, [refreshQuery, selectedEventId]);
 
-  const selectCourseForCompetitor = useCallback(async (competitorId: string, courseId: string | null) => {
+  const selectCourseForCompetitor = useCallback(async (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod) => {
     if (!selectedEventId) {
       return;
     }
@@ -174,6 +175,8 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
             competitorId,
             courseId,
             competitionGroupName: selectedCompetitionGroupName ?? "",
+            paidPriceCents: paidPriceCents ?? 0,
+            paymentMethod: paymentMethod ?? "cash",
           })
         : await desktopClearRegistration({
             eventId: selectedEventId,

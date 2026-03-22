@@ -68,6 +68,8 @@ export const paymentGroupSchema = z.object({
   competitors: z.array(paymentGroupMemberSchema),
 });
 
+export const paymentMethodSchema = z.enum(["cash", "prepaid", "stebby", "debt", "other"]);
+
 export const registrationSchema = z.object({
   registrationId: z.string().uuid(),
   deviceId: z.string().min(1),
@@ -76,6 +78,8 @@ export const registrationSchema = z.object({
   courseId: z.string().min(1),
   competitionGroupName: z.string().min(1),
   priceCents: z.number().int().nonnegative(),
+  paidPriceCents: z.number().int().nonnegative(),
+  paymentMethod: paymentMethodSchema,
   createdAtDevice: z.string().datetime(),
   localSeq: z.number().int().nonnegative(),
 });
@@ -122,6 +126,7 @@ export type PricingRule = z.infer<typeof pricingRuleSchema>;
 export type PaymentGroupMember = z.infer<typeof paymentGroupMemberSchema>;
 export type CompetitionGroup = z.infer<typeof competitionGroupSchema>;
 export type PaymentGroup = z.infer<typeof paymentGroupSchema>;
+export type PaymentMethod = z.infer<typeof paymentMethodSchema>;
 export type Registration = z.infer<typeof registrationSchema>;
 export type RegistrationCleared = z.infer<typeof registrationClearedSchema>;
 export type ReservedCode = z.infer<typeof reservedCodeSchema>;

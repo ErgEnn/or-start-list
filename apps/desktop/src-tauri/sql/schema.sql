@@ -86,6 +86,8 @@ CREATE TABLE IF NOT EXISTS registrations (
   course_id TEXT NOT NULL,
   competition_group_name TEXT NOT NULL,
   price_cents INTEGER NOT NULL,
+  paid_price_cents INTEGER NOT NULL DEFAULT 0,
+  payment_method TEXT NOT NULL DEFAULT 'cash',
   created_at_device TEXT NOT NULL,
   local_seq INTEGER NOT NULL
 );

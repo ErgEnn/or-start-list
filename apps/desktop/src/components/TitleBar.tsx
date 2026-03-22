@@ -1,3 +1,4 @@
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import { Box, Typography } from '@mui/material';
 import type { Event } from '@or/shared';
 import { t } from '../i18n';
@@ -28,8 +29,9 @@ export function TitleBar({ selectedEvent, onClick }: TitleBarProps) {
         marginX: '-1vw',
       }}
     >
-      <Typography variant='body1' fontWeight={700} color='primary.contrastText' textAlign='center'>
+      <Typography variant='body1' fontWeight={700} color='primary.contrastText' textAlign='center' sx={{ display: 'flex', alignItems: 'center' }}>
         {selectedEvent ? formatEventLabel(selectedEvent) : t('event_select')}
+        <ArrowDropDownIcon sx={{ color: 'primary.contrastText', ml: 0.25 }} />
       </Typography>
     </Box>
   );

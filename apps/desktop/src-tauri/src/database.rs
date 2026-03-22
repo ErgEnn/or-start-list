@@ -107,6 +107,18 @@ pub fn init_schema(db: &mut SqliteConnection) -> Result<(), String> {
         .execute(db)
         .map_err(|error| error.to_string())?;
     ensure_column(db, "sync_meta", "last_sync_error_detail", "last_sync_error_detail TEXT")?;
+    ensure_column(
+        db,
+        "registrations",
+        "paid_price_cents",
+        "paid_price_cents INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        db,
+        "registrations",
+        "payment_method",
+        "payment_method TEXT NOT NULL DEFAULT 'cash'",
+    )?;
     Ok(())
 }
 
@@ -440,6 +452,8 @@ pub fn load_recent_registrations(
            COALESCE(co.name, r.course_id) AS course_name, \
            r.competition_group_name, \
            r.price_cents, \
+           r.paid_price_cents, \
+           r.payment_method, \
            r.created_at_device \
          FROM registrations r \
          LEFT JOIN source_competitors c ON c.competitor_id = r.competitor_id \
@@ -973,8 +987,8 @@ pub fn claim_reserved_code(
 
         // 7. Insert registration
         sql_query(
-            "INSERT INTO registrations(registration_id, device_id, event_id, competitor_id, course_id, competition_group_name, price_cents, created_at_device, local_seq) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO registrations(registration_id, device_id, event_id, competitor_id, course_id, competition_group_name, price_cents, paid_price_cents, payment_method, created_at_device, local_seq) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind::<Text, _>(&registration_id)
         .bind::<Text, _>(&device_id)
@@ -983,6 +997,8 @@ pub fn claim_reserved_code(
         .bind::<Text, _>(&request.course_id)
         .bind::<Text, _>(&competition_group_name)
         .bind::<BigInt, _>(price_cents)
+        .bind::<BigInt, _>(price_cents)
+        .bind::<Text, _>("cash")
         .bind::<Text, _>(&created_at)
         .bind::<BigInt, _>(reg_seq)
         .execute(connection)?;
@@ -996,6 +1012,8 @@ pub fn claim_reserved_code(
             course_id: request.course_id.clone(),
             competition_group_name: competition_group_name.clone(),
             price_cents,
+            paid_price_cents: price_cents,
+            payment_method: "cash".to_string(),
             created_at_device: created_at.clone(),
             local_seq: reg_seq,
         })
@@ -1084,8 +1102,8 @@ pub fn create_registration(
         .execute(connection)?;
 
         sql_query(
-            "INSERT INTO registrations(registration_id, device_id, event_id, competitor_id, course_id, competition_group_name, price_cents, created_at_device, local_seq) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO registrations(registration_id, device_id, event_id, competitor_id, course_id, competition_group_name, price_cents, paid_price_cents, payment_method, created_at_device, local_seq) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind::<Text, _>(&registration_id)
         .bind::<Text, _>(&device_id)
@@ -1094,6 +1112,8 @@ pub fn create_registration(
         .bind::<Text, _>(&request.course_id)
         .bind::<Text, _>(&request.competition_group_name)
         .bind::<BigInt, _>(price_cents)
+        .bind::<BigInt, _>(request.paid_price_cents)
+        .bind::<Text, _>(&request.payment_method)
         .bind::<Text, _>(&created_at)
         .bind::<BigInt, _>(next_local_seq)
         .execute(connection)?;
@@ -1106,6 +1126,8 @@ pub fn create_registration(
             course_id: request.course_id.clone(),
             competition_group_name: request.competition_group_name.clone(),
             price_cents,
+            paid_price_cents: request.paid_price_cents,
+            payment_method: request.payment_method.clone(),
             created_at_device: created_at.clone(),
             local_seq: next_local_seq,
         })

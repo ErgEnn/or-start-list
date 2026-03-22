@@ -289,35 +289,57 @@ function resolveCompetitorRoot(parser: XMLParser, xml: string): EolRoot {
     return first;
   }
 
-  const compressed = extractCompressedData(first);
-  if (!compressed) {
+  const chunks = extractCompressedDataChunks(first);
+  if (!chunks) {
     return first;
   }
 
-  const decompressedXml = decompressCompressedData(compressed);
+  const decompressedXml = chunks.map(decompressChunk).join("");
   const second = parser.parse(decompressedXml) as EolRoot;
   return second;
 }
 
-function extractCompressedData(root: EolRoot): string | undefined {
+function extractCompressedDataChunks(root: EolRoot): string[] | undefined {
   const node = root.CompressedData;
   if (!node) {
     return undefined;
   }
 
+  // Single text node: <CompressedData>base64...</CompressedData>
   const text = readText(node);
   if (text) {
-    return text;
+    return [text];
   }
 
   if (typeof node === "object" && node !== null) {
-    return readText((node as UnknownMap)["#text"]);
+    const obj = node as UnknownMap;
+
+    // Single text with attributes: <CompressedData ver="...">base64...</CompressedData>
+    const directText = readText(obj["#text"]);
+    if (directText) {
+      return [directText];
+    }
+
+    // Chunked format: <CompressedData><Data from="0">base64</Data><Data from="1">base64</Data>...</CompressedData>
+    if (obj.Data) {
+      const dataNodes = asArray(obj.Data as UnknownMap | UnknownMap[]);
+      const chunks: string[] = [];
+      for (const dataNode of dataNodes) {
+        const chunkText = readText(dataNode);
+        if (chunkText) {
+          chunks.push(chunkText);
+        }
+      }
+      if (chunks.length > 0) {
+        return chunks;
+      }
+    }
   }
 
   return undefined;
 }
 
-function decompressCompressedData(base64Payload: string): string {
+function decompressChunk(base64Payload: string): string {
   const compact = base64Payload.replace(/\s+/g, "");
   const bytes = Buffer.from(compact, "base64");
   try {

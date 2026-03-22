@@ -145,6 +145,8 @@ export const registrations = pgTable(
     courseId: text("course_id").notNull(),
     competitionGroupName: text("competition_group_name").notNull(),
     priceCents: numeric("price_cents", { precision: 10, scale: 2 }).notNull(),
+    paidPriceCents: numeric("paid_price_cents", { precision: 10, scale: 2 }).notNull().default("0"),
+    paymentMethod: text("payment_method").notNull().default("cash"),
     createdAtDevice: timestamp("created_at_device", { withTimezone: true }).notNull(),
     localSeq: integer("local_seq").notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
