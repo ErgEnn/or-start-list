@@ -3,14 +3,43 @@
 import { Button, Card, Input, Space, Statistic, Table, message } from "antd";
 import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCompetitorSearch } from "@/lib/hooks/use-competitor-search";
 import { t } from "@/lib/i18n";
+import type { SourceCompetitorImportStatus } from "@/lib/source-competitors";
 
 export default function CompetitorsPage() {
   const { filteredRows, loading, refresh, searchInput, setSearchInput } = useCompetitorSearch();
   const [isImporting, setIsImporting] = useState(false);
+  const [lastImportedAt, setLastImportedAt] = useState<string | null>(null);
   const [messageApi, messageContextHolder] = message.useMessage();
+
+  async function loadImportStatus() {
+    const response = await fetch("/api/admin/competitors/import-source", {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to load source import status (${response.status})`);
+    }
+
+    const payload = (await response.json()) as SourceCompetitorImportStatus;
+    setLastImportedAt(payload.importedAt);
+  }
+
+  useEffect(() => {
+    loadImportStatus().catch((error) => {
+      console.error("Failed to load source competitor import status:", error);
+      setLastImportedAt(null);
+    });
+  }, []);
+
+  const formattedLastImportedAt = useMemo(() => {
+    if (!lastImportedAt) {
+      return t("competitors.lastSourceImportNever");
+    }
+
+    return new Date(lastImportedAt).toLocaleString();
+  }, [lastImportedAt]);
 
   async function downloadFromOrigin() {
     setIsImporting(true);
@@ -21,7 +50,12 @@ export default function CompetitorsPage() {
       if (!response.ok) {
         throw new Error(`Import failed (${response.status})`);
       }
+      const payload = (await response.json()) as {
+        imported: { importedAt: string };
+        status: SourceCompetitorImportStatus;
+      };
       await refresh();
+      setLastImportedAt(payload.status.importedAt);
       messageApi.success(t("competitors.importSuccess"));
     } catch {
       messageApi.error(t("competitors.importError"));
@@ -39,6 +73,9 @@ export default function CompetitorsPage() {
             {t("competitors.title")}
           </Title>
           <Paragraph style={{ margin: 0, color: "#595959" }}>{t("competitors.subtitle")}</Paragraph>
+          <Paragraph style={{ margin: 0, color: "#595959" }}>
+            {t("competitors.lastSourceImport")}: {formattedLastImportedAt}
+          </Paragraph>
           <Space>
             <Input
               value={searchInput}
