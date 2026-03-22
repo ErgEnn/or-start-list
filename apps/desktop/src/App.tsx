@@ -28,7 +28,6 @@ export function App() {
   const [savedTextScale, setSavedTextScale] = useState(DEFAULT_TEXT_SCALE);
   const [textScale, setTextScale] = useState(DEFAULT_TEXT_SCALE);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
-  const [initialEventPromptHandled, setInitialEventPromptHandled] = useState(false);
   const {
     rows,
     groupedCount,
@@ -115,17 +114,6 @@ export function App() {
 
     return () => window.clearTimeout(timeout);
   }, [focusedCompetitor]);
-
-  useEffect(() => {
-    if (loading || initialEventPromptHandled) {
-      return;
-    }
-
-    if (events.length > 0) {
-      setEventDialogOpen(true);
-    }
-    setInitialEventPromptHandled(true);
-  }, [initialEventPromptHandled, loading, events.length]);
 
   const [jumpScrollToken, setJumpScrollToken] = useState(0);
   const scrollTarget =

@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use tauri::{AppHandle, State};
 
 use crate::database::{
-    claim_reserved_code, clear_registration, conn, create_registration, emit_sync_status,
-    ensure_selected_event_id, init_schema, load_available_reserved_codes, load_competition_groups,
-    load_device_config_map, load_event_state, load_events, load_payment_groups,
-    load_sync_status_from_db, query_competitors, refresh_in_memory_sync_status,
-    save_competition_group_selection, upsert_device_config_value, AppState,
+    claim_reserved_code, clear_registration, conn, create_registration, emit_sync_status, init_schema,
+    load_available_reserved_codes, load_competition_groups, load_device_config_map, load_event_state,
+    load_events, load_payment_groups, load_sync_status_from_db, query_competitors,
+    refresh_in_memory_sync_status, save_competition_group_selection, select_startup_event_id,
+    upsert_device_config_value, AppState,
 };
 use crate::models::{
     DesktopBootstrapResponse, DesktopClaimReservedCodeRequest, DesktopClearRegistrationRequest,
@@ -37,7 +37,7 @@ pub fn set_device_config(state: State<AppState>, key: String, value: String) -> 
 #[tauri::command]
 pub fn desktop_bootstrap(state: State<AppState>) -> Result<DesktopBootstrapResponse, String> {
     let mut db = conn(&state)?;
-    let selected_event_id = ensure_selected_event_id(&mut db)?;
+    let selected_event_id = select_startup_event_id(&mut db)?;
     Ok(DesktopBootstrapResponse {
         events: load_events(&mut db)?,
         payment_groups: load_payment_groups(&mut db)?,
