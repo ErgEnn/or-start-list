@@ -125,11 +125,15 @@ async function createSchema(): Promise<void> {
       course_id text NOT NULL,
       competition_group_name text NOT NULL,
       price_cents numeric(10, 2) NOT NULL,
+      paid_price_cents numeric(10, 2) NOT NULL DEFAULT 0,
+      payment_method text NOT NULL DEFAULT 'cash',
       created_at_device timestamptz NOT NULL,
       local_seq integer NOT NULL,
       received_at timestamptz NOT NULL DEFAULT now()
     )
   `);
+  await pool.query(`ALTER TABLE registrations ADD COLUMN IF NOT EXISTS paid_price_cents numeric(10, 2) NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE registrations ADD COLUMN IF NOT EXISTS payment_method text NOT NULL DEFAULT 'cash'`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS registrations_device_local_seq_idx ON registrations(device_id, local_seq)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS published_registrations (
