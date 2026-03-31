@@ -89,64 +89,10 @@ jobs:
           path: |
             apps/desktop/src-tauri/target/release/or_start_list_desktop.exe
             apps/desktop/src-tauri/target/release/bundle/**/*.exe
-            apps/desktop/src-tauri/target/release/bundle/**/*.msi
-
-  build-android:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9.12.3
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Setup Java JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android NDK
-        run: sdkmanager --install "ndk;27.0.12077973"
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
-
-      - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Initialize Tauri Android
-        run: pnpm --filter @or/desktop exec tauri android init
-
-      - name: Build Android APK
-        run: pnpm --filter @or/desktop exec tauri android build --apk
-        env:
-          BUILD_NUMBER: ${{ github.run_number }}
-          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
-
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-apk
-          path: apps/desktop/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
 
   publish-release:
     if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag' || github.ref == 'refs/heads/main'
-    needs: [release-meta, build-windows, build-android]
+    needs: [release-meta, build-windows]
     runs-on: ubuntu-latest
 
     steps:
@@ -155,12 +101,6 @@ jobs:
         with:
           name: windows-builds
           path: windows
-
-      - name: Download Android artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: android-apk
-          path: android
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -174,5 +114,3 @@ jobs:
           make_latest: ${{ github.ref_type == 'tag' }}
           files: |
             windows/**/*.exe
-            windows/**/*.msi
-            android/**/*.apk
