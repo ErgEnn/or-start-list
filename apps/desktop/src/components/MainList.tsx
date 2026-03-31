@@ -195,21 +195,16 @@ const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableR
     textScale,
     onClick,
   }, ref) {
-    const isHighlighted = isFocused || isLetterHighlighted;
     const rowBackgroundColor = isFocused
       ? 'warning.light'
-      : isHighlighted
-        ? 'action.selected'
-        : rowColor
-          ? lightenHex(rowColor, hasSelectedCourse ? 0.3 : 0.12)
-          : 'inherit';
+      : rowColor
+        ? lightenHex(rowColor, hasSelectedCourse ? 0.3 : 0.12)
+        : 'inherit';
     const rowHoverColor = isFocused
       ? 'warning.light'
-      : isHighlighted
-        ? 'action.selected'
-        : rowColor
-          ? lightenHex(rowColor, hasSelectedCourse ? 0.36 : 0.2)
-          : 'action.hover';
+      : rowColor
+        ? lightenHex(rowColor, hasSelectedCourse ? 0.36 : 0.2)
+        : 'action.hover';
 
     return (
       <TableRow
@@ -220,6 +215,8 @@ const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableR
           cursor: 'pointer',
           color: rowColor ? getContrastingTextColor(rowBackgroundColor) : hasSelectedCourse ? '#ddd' : 'text.primary',
           backgroundColor: rowBackgroundColor,
+          outline: isLetterHighlighted ? '2px solid #FFD600' : 'none',
+          outlineOffset: '-2px',
           '&:hover': {
             backgroundColor: rowHoverColor,
           },

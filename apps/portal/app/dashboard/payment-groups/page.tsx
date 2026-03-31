@@ -4,7 +4,9 @@ import { Button, Card, Input, InputNumber, Modal, Popconfirm, Space, Statistic, 
 import type { ColumnsType } from "antd/es/table";
 import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
+import * as XLSX from "xlsx";
 import type { CompetitorRow } from "@/lib/competitors-indexed-db";
 import { useCompetitorSearch } from "@/lib/hooks/use-competitor-search";
 import { t } from "@/lib/i18n";
@@ -17,6 +19,7 @@ type PaymentGroupCompetitor = {
   firstName: string | null;
   lastName: string | null;
   club: string | null;
+  eventsAttended: number;
 };
 
 type PaymentGroupRow = {
@@ -35,6 +38,7 @@ type EditableMember = {
   firstName: string | null;
   lastName: string | null;
   club: string | null;
+  eventsAttended: number;
 };
 
 function displayPrice(value: number | null) {
@@ -103,6 +107,7 @@ export default function PaymentGroupsPage() {
         firstName: member.firstName,
         lastName: member.lastName,
         club: member.club,
+        eventsAttended: member.eventsAttended,
       })),
     );
     setSearchInput("");
@@ -123,6 +128,7 @@ export default function PaymentGroupsPage() {
           firstName: item.firstName,
           lastName: item.lastName,
           club: item.club,
+          eventsAttended: 0,
         },
       ];
     });
@@ -197,6 +203,60 @@ export default function PaymentGroupsPage() {
     await loadGroups();
   }
 
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [importTargetGroupId, setImportTargetGroupId] = useState<string | null>(null);
+
+  function triggerImport(paymentGroupId: string) {
+    setImportTargetGroupId(paymentGroupId);
+    importInputRef.current?.click();
+  }
+
+  async function handleImportFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Reset input so the same file can be re-selected
+    event.target.value = "";
+    if (!file || !importTargetGroupId) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch(
+        `/api/admin/payment-groups/${encodeURIComponent(importTargetGroupId)}/import`,
+        { method: "POST", body: formData },
+      );
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        if (body?.error === "unknown_eol" && Array.isArray(body.notFound)) {
+          apiMessage.error(t("paymentGroups.importUnknownEol").replace("{eolNumbers}", body.notFound.join(", ")));
+        } else {
+          apiMessage.error(t("paymentGroups.importError"));
+        }
+        return;
+      }
+
+      const body = await response.json();
+      apiMessage.success(t("paymentGroups.importSuccess").replace("{count}", String(body.imported)));
+      await loadGroups();
+    } catch {
+      apiMessage.error(t("paymentGroups.importError"));
+    }
+  }
+
+  function exportGroupExcel(group: PaymentGroupRow) {
+    const data = group.competitors.map((c) => ({
+      [t("competitors.eolNumber")]: c.eolNumber ?? "",
+      [t("competitors.firstName")]: c.firstName ?? "",
+      [t("competitors.lastName")]: c.lastName ?? "",
+      [t("paymentGroups.eventsAttended")]: c.eventsAttended,
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, group.name.slice(0, 31));
+    XLSX.writeFile(wb, `${group.name}.xlsx`);
+  }
+
   const groupsColumns: ColumnsType<PaymentGroupRow> = [
     { title: t("paymentGroups.name"), dataIndex: "name", key: "name" },
     {
@@ -239,10 +299,20 @@ export default function PaymentGroupsPage() {
     {
       title: t("paymentGroups.actions"),
       key: "actions",
-      width: 200,
+      width: 460,
       render: (_, row) => (
         <Space>
           <Button onClick={() => openEditModal(row)}>{t("paymentGroups.edit")}</Button>
+          <Button icon={<UploadOutlined />} onClick={() => triggerImport(row.paymentGroupId)}>
+            {t("paymentGroups.importCsv")}
+          </Button>
+          <Button
+            icon={<DownloadOutlined />}
+            disabled={row.competitors.length === 0}
+            onClick={() => exportGroupExcel(row)}
+          >
+            {t("paymentGroups.exportExcel")}
+          </Button>
           <Popconfirm title={t("paymentGroups.delete")} onConfirm={() => deleteGroup(row.paymentGroupId)}>
             <Button danger>{t("paymentGroups.delete")}</Button>
           </Popconfirm>
@@ -271,12 +341,18 @@ export default function PaymentGroupsPage() {
   const selectedColumns: ColumnsType<EditableMember> = [
     { title: t("competitors.eolNumber"), dataIndex: "eolNumber", key: "eolNumber", width: 120 },
     {
-      title: t("competitors.firstName"),
+      title: t("competitors.fullName"),
       key: "name",
       width: 200,
       render: (_, row) => competitorName({ firstName: row.firstName, lastName: row.lastName }),
     },
     { title: t("competitors.club"), dataIndex: "club", key: "club", width: 180 },
+    {
+      title: t("paymentGroups.eventsAttended"),
+      dataIndex: "eventsAttended",
+      key: "eventsAttended",
+      width: 80,
+    },
     {
       title: t("paymentGroups.competitorPriceOverride"),
       key: "priceOverrideCents",
@@ -310,6 +386,7 @@ export default function PaymentGroupsPage() {
   return (
     <Space direction="vertical" size={16} style={{ width: "100%" }}>
       {contextHolder}
+      <input ref={importInputRef} type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={handleImportFile} />
       <Card>
         <Space direction="vertical" style={{ width: "100%" }}>
           <Title level={3} style={{ margin: 0 }}>

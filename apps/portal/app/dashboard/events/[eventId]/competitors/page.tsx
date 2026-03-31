@@ -11,6 +11,7 @@ import { formatEuro } from "@/lib/money";
 
 type EventCompetitorRow = {
   registrationId: string;
+  competitorId: string;
   eolNumber: string | null;
   firstName: string | null;
   lastName: string | null;
@@ -22,6 +23,7 @@ type EventCompetitorRow = {
 
 type EventDetailPayload = {
   competitors: EventCompetitorRow[];
+  paymentGroups: Record<string, string[]>;
 };
 
 export default function EventCompetitorsPage() {
@@ -30,6 +32,7 @@ export default function EventCompetitorsPage() {
   const eventId = params.eventId;
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<EventCompetitorRow[]>([]);
+  const [paymentGroupMap, setPaymentGroupMap] = useState<Record<string, string[]>>({});
   const [apiMessage, contextHolder] = message.useMessage();
 
   async function loadCompetitors() {
@@ -43,11 +46,12 @@ export default function EventCompetitorsPage() {
 
     const payload = (await response.json()) as EventDetailPayload;
     setRows(payload.competitors);
+    setPaymentGroupMap(payload.paymentGroups ?? {});
     setLoading(false);
   }
 
-  function exportExcel() {
-    const data = rows.map((row) => ({
+  function toSheetRow(row: EventCompetitorRow) {
+    return {
       [t("events.eolNumber")]: row.eolNumber ?? "",
       [t("events.firstName")]: row.firstName ?? "",
       [t("events.lastName")]: row.lastName ?? "",
@@ -55,10 +59,23 @@ export default function EventCompetitorsPage() {
       [t("events.price")]: row.price ?? 0,
       [t("events.pricePaid")]: row.pricePaid ?? 0,
       [t("events.paymentMethod")]: row.paymentMethod,
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
+    };
+  }
+
+  function exportExcel() {
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Competitors");
+
+    const allData = rows.map(toSheetRow);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allData), "Competitors");
+
+    for (const [groupName, competitorIds] of Object.entries(paymentGroupMap)) {
+      const idSet = new Set(competitorIds);
+      const groupRows = rows.filter((r) => idSet.has(r.competitorId));
+      if (groupRows.length === 0) continue;
+      const sheetName = groupName.slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(groupRows.map(toSheetRow)), sheetName);
+    }
+
     XLSX.writeFile(wb, `competitors-${eventId}.xlsx`);
   }
 

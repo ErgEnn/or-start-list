@@ -1,7 +1,7 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { competitors, courses, events, registrations, sourceCompetitors } from "@/lib/db/schema";
+import { competitors, courses, events, paymentGroupCompetitors, paymentGroups, registrations, sourceCompetitors } from "@/lib/db/schema";
 import { moneyFromDb } from "@/lib/money";
 import { requireAdminSession } from "@/lib/session";
 
@@ -98,10 +98,33 @@ export async function GET(_: NextRequest, context: { params: Promise<{ eventId: 
     pricePaid: moneyFromDb(row.pricePaid),
   }));
 
+  const competitorIds = eventCompetitors.map((r) => r.competitorId);
+
+  const pgMemberships =
+    competitorIds.length > 0
+      ? await db
+          .select({
+            paymentGroupName: paymentGroups.name,
+            competitorId: paymentGroupCompetitors.competitorId,
+          })
+          .from(paymentGroupCompetitors)
+          .innerJoin(paymentGroups, eq(paymentGroups.paymentGroupId, paymentGroupCompetitors.paymentGroupId))
+          .where(inArray(paymentGroupCompetitors.competitorId, competitorIds))
+      : [];
+
+  const paymentGroupMap: Record<string, string[]> = {};
+  for (const m of pgMemberships) {
+    if (!paymentGroupMap[m.paymentGroupName]) {
+      paymentGroupMap[m.paymentGroupName] = [];
+    }
+    paymentGroupMap[m.paymentGroupName].push(m.competitorId);
+  }
+
   return NextResponse.json(
     {
       event,
       competitors: competitorRows,
+      paymentGroups: paymentGroupMap,
     },
     { status: 200 },
   );

@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, countDistinct, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { withTransaction } from "@/lib/db";
-import { paymentGroupCompetitors, paymentGroups, sourceCompetitors } from "@/lib/db/schema";
+import { paymentGroupCompetitors, paymentGroups, registrations, sourceCompetitors } from "@/lib/db/schema";
 import { moneyFromDb, parseOptionalMoney, toMoneyDb } from "@/lib/money";
 import { requireAdminSession } from "@/lib/session";
 
@@ -35,6 +35,11 @@ type GroupMemberRow = {
   firstName: string | null;
   lastName: string | null;
   club: string | null;
+};
+
+type EventCountRow = {
+  competitorId: string;
+  eventCount: number;
 };
 
 function normalizeCompetitors(value: unknown) {
@@ -122,6 +127,25 @@ export async function GET() {
         asc(paymentGroupCompetitors.competitorId),
       )) as GroupMemberRow[];
 
+    const allCompetitorIds = [...new Set(competitors.map((c) => c.competitorId))];
+
+    const eventCounts: EventCountRow[] =
+      allCompetitorIds.length > 0
+        ? await tx
+            .select({
+              competitorId: registrations.competitorId,
+              eventCount: countDistinct(registrations.eventId).mapWith(Number),
+            })
+            .from(registrations)
+            .where(sql`${registrations.competitorId} IN ${allCompetitorIds}`)
+            .groupBy(registrations.competitorId)
+        : [];
+
+    const eventCountMap = new Map<string, number>();
+    for (const row of eventCounts) {
+      eventCountMap.set(row.competitorId, row.eventCount);
+    }
+
     const competitorsByGroup = new Map<string, typeof competitors>();
     for (const row of competitors) {
       const list = competitorsByGroup.get(row.paymentGroupId) ?? [];
@@ -150,6 +174,7 @@ export async function GET() {
         competitors: members.map((member) => ({
           ...member,
           priceOverrideCents: moneyFromDb(member.priceOverrideCents),
+          eventsAttended: eventCountMap.get(member.competitorId) ?? 0,
         })),
       };
     });

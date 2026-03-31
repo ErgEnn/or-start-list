@@ -3,7 +3,8 @@
 import { Button, Card, Form, Input, Modal, Space, Statistic, Switch, Table, message } from "antd";
 import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { UploadOutlined } from "@ant-design/icons";
 import { t } from "@/lib/i18n";
 
 type ReservedCodeRow = {
@@ -28,6 +29,7 @@ export default function ReservedCodesPage() {
   const [updatingCode, setUpdatingCode] = useState<string | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<{ code: string }>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function loadRows() {
     setLoading(true);
@@ -66,6 +68,41 @@ export default function ReservedCodesPage() {
       messageApi.error(t("reservedCodes.addError"));
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleCsvImport(file: File) {
+    const text = await file.text();
+    const codes = text
+      .split(/[\r\n,;]+/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (codes.length === 0) {
+      messageApi.warning(t("reservedCodes.importEmpty"));
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/admin/reserved-codes", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codes }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Import failed (${response.status})`);
+      }
+
+      const payload = (await response.json()) as { importedCount: number; totalCount: number };
+      messageApi.success(
+        t("reservedCodes.importSuccess")
+          .replace("{count}", String(payload.importedCount))
+          .replace("{total}", String(payload.totalCount)),
+      );
+      await loadRows();
+    } catch {
+      messageApi.error(t("reservedCodes.importError"));
     }
   }
 
@@ -109,6 +146,22 @@ export default function ReservedCodesPage() {
             <Button type="primary" onClick={() => setIsAddModalOpen(true)}>
               {t("reservedCodes.add")}
             </Button>
+            <Button icon={<UploadOutlined />} onClick={() => fileInputRef.current?.click()}>
+              {t("reservedCodes.importCsv")}
+            </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.txt"
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  handleCsvImport(file);
+                }
+                e.target.value = "";
+              }}
+            />
             <Button onClick={loadRows}>{t("reservedCodes.refresh")}</Button>
             <Statistic title={t("reservedCodes.total")} value={rows.length} />
           </Space>
