@@ -87,7 +87,7 @@ export default function CompetitorsPage() {
               {t("competitors.downloadOrigin")}
             </Button>
             <Button onClick={refresh}>{t("competitors.refresh")}</Button>
-            <Statistic title={t("competitors.total")} value={filteredRows.length} />
+            <Statistic title={t("competitors.total")} value={filteredRows.length} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
           </Space>
         </Space>
       </Card>

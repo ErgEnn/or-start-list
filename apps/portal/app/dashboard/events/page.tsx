@@ -150,7 +150,7 @@ export default function EventsPage() {
               {t("events.add")}
             </Button>
             <Button onClick={loadEvents}>{t("events.refresh")}</Button>
-            <Statistic title={t("events.total")} value={filteredRows.length} />
+            <Statistic title={t("events.total")} value={filteredRows.length} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
           </Space>
         </Space>
       </Card>

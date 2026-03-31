@@ -112,7 +112,7 @@ export default function RentalSisPage() {
               {t("rentalSIs.add")}
             </Button>
             <Button onClick={loadRows}>{t("rentalSIs.refresh")}</Button>
-            <Statistic title={t("rentalSIs.total")} value={rows.length} />
+            <Statistic title={t("rentalSIs.total")} value={rows.length} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
           </Space>
         </Space>
       </Card>

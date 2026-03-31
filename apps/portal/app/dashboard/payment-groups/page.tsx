@@ -398,7 +398,7 @@ export default function PaymentGroupsPage() {
               {t("paymentGroups.add")}
             </Button>
             <Button onClick={loadGroups}>{t("paymentGroups.refresh")}</Button>
-            <Statistic title={t("paymentGroups.total")} value={rows.length} />
+            <Statistic title={t("paymentGroups.total")} value={rows.length} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
           </Space>
         </Space>
       </Card>

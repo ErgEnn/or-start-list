@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::database::{
     claim_reserved_code, clear_registration, conn, create_registration, emit_sync_status, init_schema,
@@ -9,6 +9,7 @@ use crate::database::{
     refresh_in_memory_sync_status, save_competition_group_selection, select_startup_event_id,
     update_registration_payment, upsert_device_config_value, AppState,
 };
+use crate::si_reader::{self, SiReaderState};
 use crate::models::{
     DesktopBootstrapResponse, DesktopClaimReservedCodeRequest, DesktopClearRegistrationRequest,
     DesktopCreateRegistrationRequest, DesktopCreateRegistrationResponse, DesktopEventState,
@@ -164,4 +165,47 @@ pub fn desktop_get_sync_status(app: AppHandle) -> Result<DesktopSyncStatus, Stri
 #[tauri::command]
 pub async fn desktop_force_sync(app: AppHandle) -> Result<(), String> {
     crate::sync::run_sync_cycle(&app).await
+}
+
+#[tauri::command]
+pub async fn si_connect(app: AppHandle) -> Result<(), String> {
+    let port_name = si_reader::find_si_port()?;
+
+    {
+        let state = app.state::<SiReaderState>();
+        let already_connected = *state.connected.lock().map_err(|_| "Lock failed".to_string())?;
+        if already_connected {
+            return Err("SI reader already connected".to_string());
+        }
+    }
+
+    // Open port synchronously so errors (e.g. permission denied) are returned to frontend
+    let port = si_reader::open_si_port(&port_name)?;
+
+    {
+        let state = app.state::<SiReaderState>();
+        *state.cancel_flag.lock().map_err(|_| "Lock failed".to_string())? = false;
+        *state.connected.lock().map_err(|_| "Lock failed".to_string())? = true;
+    }
+
+    let app_clone = app.clone();
+    tokio::task::spawn_blocking(move || {
+        si_reader::read_loop(app_clone, port);
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn si_disconnect(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<SiReaderState>();
+    *state.cancel_flag.lock().map_err(|_| "Lock failed".to_string())? = true;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn si_get_status(app: AppHandle) -> Result<bool, String> {
+    let state = app.state::<SiReaderState>();
+    let connected = *state.connected.lock().map_err(|_| "Lock failed".to_string())?;
+    Ok(connected)
 }

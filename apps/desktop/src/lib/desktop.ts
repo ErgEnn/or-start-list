@@ -101,3 +101,38 @@ export async function onDesktopSyncStatus(
     callback(desktopSyncStatusSchema.parse(event.payload));
   });
 }
+
+// SI Reader
+
+const SI_CARD_READ_EVENT = "desktop://si-card-read";
+const SI_READER_STATUS_EVENT = "desktop://si-reader-status";
+
+export async function siConnect(): Promise<void> {
+  await invoke("si_connect");
+}
+
+export async function siDisconnect(): Promise<void> {
+  await invoke("si_disconnect");
+}
+
+export async function siGetStatus(): Promise<boolean> {
+  return (await invoke("si_get_status")) as boolean;
+}
+
+export type SiReaderStatus = { connected: boolean; error?: string };
+
+export async function onSiCardRead(
+  callback: (cardNumber: number) => void,
+): Promise<UnlistenFn> {
+  return listen<{ cardNumber: number }>(SI_CARD_READ_EVENT, (event) => {
+    callback(event.payload.cardNumber);
+  });
+}
+
+export async function onSiReaderStatus(
+  callback: (status: SiReaderStatus) => void,
+): Promise<UnlistenFn> {
+  return listen<SiReaderStatus>(SI_READER_STATUS_EVENT, (event) => {
+    callback(event.payload);
+  });
+}

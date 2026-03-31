@@ -163,7 +163,7 @@ export default function ReservedCodesPage() {
               }}
             />
             <Button onClick={loadRows}>{t("reservedCodes.refresh")}</Button>
-            <Statistic title={t("reservedCodes.total")} value={rows.length} />
+            <Statistic title={t("reservedCodes.total")} value={rows.length} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
           </Space>
         </Space>
       </Card>

@@ -104,7 +104,7 @@ export default function DevicesPage() {
               {t("devices.register")}
             </Button>
             <Button onClick={loadDevices}>{t("devices.refresh")}</Button>
-            <Statistic title={t("devices.total")} value={rows.length} />
+            <Statistic title={t("devices.total")} value={rows.length} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
           </Space>
         </Space>
       </Card>

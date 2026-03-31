@@ -1,6 +1,7 @@
 mod commands;
 mod database;
 mod models;
+mod si_reader;
 mod sync;
 
 use std::{fs::OpenOptions, path::PathBuf};
@@ -29,6 +30,7 @@ fn init_file_logger(log_file: PathBuf) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
+        .manage(si_reader::SiReaderState::default())
         .setup(|app| {
             let data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
             std::fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
@@ -84,6 +86,9 @@ pub fn run() {
             commands::desktop_get_reserved_codes,
             commands::desktop_claim_reserved_code,
             commands::desktop_force_sync,
+            commands::si_connect,
+            commands::si_disconnect,
+            commands::si_get_status,
         ])
         .run(tauri::generate_context!())
         .expect("tauri app error");

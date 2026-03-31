@@ -28,7 +28,9 @@ import {
   TEXT_SCALE_STEP,
   type DeviceConfig,
 } from "../lib/device-config";
-import { desktopForceSync } from "../lib/desktop";
+import UsbIcon from "@mui/icons-material/Usb";
+import { desktopForceSync, siConnect } from "../lib/desktop";
+import { useSiReaderStore } from "../stores/siReaderStore";
 import { t } from "../i18n";
 
 type SettingsButtonProps = {
@@ -49,6 +51,9 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
   const [syncMessage, setSyncMessage] = useState("");
   const [portalBaseUrlLocked, setPortalBaseUrlLocked] = useState(false);
   const [apiKeyLocked, setApiKeyLocked] = useState(false);
+  const [siConnecting, setSiConnecting] = useState(false);
+  const [siMessage, setSiMessage] = useState("");
+  const siConnected = useSiReaderStore((s) => s.connected);
 
   useEffect(() => {
     if (!open) {
@@ -123,6 +128,22 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
     }
   }
 
+  async function handleSiConnect() {
+    setSiConnecting(true);
+    setSiMessage("");
+    try {
+      await siConnect();
+      useSiReaderStore.getState().setConnected(true);
+      setSiMessage("OK");
+    } catch (e: unknown) {
+      console.error("SI connect error:", e);
+      const msg = e instanceof Error ? e.message : typeof e === "string" ? e : JSON.stringify(e);
+      setSiMessage(msg || t("si_connect_failed"));
+    } finally {
+      setSiConnecting(false);
+    }
+  }
+
   function handleClose() {
     setOpen(false);
     setSyncMessage("");
@@ -163,6 +184,21 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
                       onTextScalePreview?.(nextValue);
                     }}
                   />
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={siConnecting ? <CircularProgress size={16} /> : <UsbIcon />}
+                    onClick={() => void handleSiConnect()}
+                    disabled={siConnecting || siConnected}
+                  >
+                    {t("si_connect")}
+                  </Button>
+                  {siMessage ? (
+                    <Typography variant="body2" sx={{ color: siConnected || siMessage === "OK" ? "success.main" : "error.main" }}>
+                      {siConnected ? t("si_connected") : siMessage}
+                    </Typography>
+                  ) : null}
                 </Box>
                 <Accordion defaultExpanded={false} disableGutters sx={{ boxShadow: 'none', '&::before': { display: 'none' } }}>
                   <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ px: 0 }}>

@@ -216,7 +216,7 @@ export default function CompetitionGroupsPage() {
               {t("competitionGroups.add")}
             </Button>
             <Button onClick={loadRows}>{t("competitionGroups.refresh")}</Button>
-            <Statistic title={t("competitionGroups.total")} value={rows.length} />
+            <Statistic title={t("competitionGroups.total")} value={rows.length} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
           </Space>
         </Space>
       </Card>

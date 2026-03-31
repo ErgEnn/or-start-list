@@ -9,11 +9,14 @@ import { FilterBar } from './components/FilterBar';
 import { SettingsButton } from './components/SettingsButton';
 import { AddCompetitorButton } from './components/AddCompetitorButton';
 import { RecentsList } from './components/RecentsList';
+import { SiReaderButton } from './components/SiReaderButton';
 import { StatusBar } from './components/StatusBar';
 import { TitleBar } from './components/TitleBar';
 import { EventSelectionDialog } from './components/EventSelectionDialog';
 import { useCompetitorDirectory } from './hooks/useCompetitorDirectory';
 import { DEFAULT_TEXT_SCALE, loadDeviceConfig, type DeviceConfig } from './lib/device-config';
+import { onSiCardRead, onSiReaderStatus } from './lib/desktop';
+import { useSiReaderStore } from './stores/siReaderStore';
 import type { DesktopCreateRegistrationResponse } from '@or/shared';
 
 function getJumpLetter(lastName: string) {
@@ -117,6 +120,28 @@ export function App() {
     return () => window.clearTimeout(timeout);
   }, [focusedCompetitor]);
 
+  const siConnected = useSiReaderStore((s) => s.connected);
+  const siBufferedCard = useSiReaderStore((s) => s.bufferedCard);
+
+  useEffect(() => {
+    const unlistenCard = onSiCardRead((cardNumber) => {
+      if (useSiReaderStore.getState().bufferedCard !== cardNumber) {
+        useSiReaderStore.getState().setBufferedCard(cardNumber);
+      }
+    });
+    const unlistenStatus = onSiReaderStatus((status) => {
+      useSiReaderStore.getState().setConnected(status.connected);
+      if (status.error) {
+        useSiReaderStore.getState().setError(status.error);
+      }
+    });
+
+    return () => {
+      void unlistenCard.then((fn) => fn());
+      void unlistenStatus.then((fn) => fn());
+    };
+  }, []);
+
   const [jumpScrollToken, setJumpScrollToken] = useState(0);
   const scrollTarget = useMemo(
     () =>
@@ -156,6 +181,8 @@ export function App() {
   function handleCompetitorClaimed(_response: DesktopCreateRegistrationResponse) {
     setDeviceConfigRevision((current) => current + 1);
   }
+
+
 
   function handleSelectEvent(eventId: string) {
     setSelectedEventId(eventId);
@@ -203,6 +230,15 @@ export function App() {
           onClaimed={handleCompetitorClaimed}
         />
         <SearchBar value={searchInput} onChange={setSearchInput} />
+        {siConnected ? (
+          <SiReaderButton
+            bufferedCard={siBufferedCard}
+            onCardSelect={(card) => {
+              setSearchInput(String(card));
+              useSiReaderStore.getState().setBufferedCard(null);
+            }}
+          />
+        ) : null}
       </Row>
       <FilterBar paymentGroups={paymentGroups} value={selectedFilter} onChange={setSelectedFilter} />
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0, gap: '1em' }}>

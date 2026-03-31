@@ -215,8 +215,6 @@ const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableR
           cursor: 'pointer',
           color: rowColor ? getContrastingTextColor(rowBackgroundColor) : hasSelectedCourse ? '#ddd' : 'text.primary',
           backgroundColor: rowBackgroundColor,
-          outline: isLetterHighlighted ? '2px solid #FFD600' : 'none',
-          outlineOffset: '-2px',
           '&:hover': {
             backgroundColor: rowHoverColor,
           },
@@ -232,7 +230,13 @@ const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableR
       >
         <TableCell>{item.eolNumber}</TableCell>
         <TableCell>{item.firstName}</TableCell>
-        <TableCell>{item.lastName}</TableCell>
+        <TableCell>
+          {isLetterHighlighted && item.lastName.length > 0 ? (
+            <><span style={{ backgroundColor: '#FFD600', borderRadius: 2 }}>{item.lastName.charAt(0)}</span>{item.lastName.slice(1)}</>
+          ) : (
+            item.lastName
+          )}
+        </TableCell>
         {showDobColumn ? <TableCell>{item.dob ?? '—'}</TableCell> : null}
       </TableRow>
     );

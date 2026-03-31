@@ -83,6 +83,10 @@ const translations: Record<string, string> = {
   force_sync: 'Sünkrooni kohe',
   force_sync_success: 'Sünkroonimine õnnestus.',
   force_sync_failed: 'Sünkroonimine ebaõnnestus.',
+  si_connect: 'Ühenda SI lugejaga',
+  si_connected: 'SI lugeja ühendatud',
+  si_connect_failed: 'SI lugeja ühendamine ebaõnnestus',
+  si_reader: 'SI',
 };
 
 export type TranslationKey = keyof typeof translations;
