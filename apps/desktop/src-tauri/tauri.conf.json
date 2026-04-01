@@ -28,6 +28,15 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
-    "targets": "all"
+    "targets": "all",
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ErgEnn/or-start-list/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEE3NTE1Qjg3MDAyODQxNUQKUldSZFFTZ0FoMXRScDhzUmNjTzhoTDdSUUVOS2dJSnRaQmNuNEVmMzIvNmZ5UlJteCt6cjc5SW0K"
+    }
   }
 }

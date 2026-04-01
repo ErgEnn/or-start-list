@@ -29,6 +29,7 @@ fn init_file_logger(log_file: PathBuf) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .manage(si_reader::SiReaderState::default())
         .setup(|app| {

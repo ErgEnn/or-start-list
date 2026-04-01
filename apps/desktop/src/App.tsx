@@ -18,6 +18,7 @@ import { DEFAULT_TEXT_SCALE, loadDeviceConfig, type DeviceConfig } from './lib/d
 import { onSiCardRead, onSiReaderStatus } from './lib/desktop';
 import { useSiReaderStore } from './stores/siReaderStore';
 import type { DesktopCreateRegistrationResponse } from '@or/shared';
+import { checkForAppUpdate } from './lib/updater';
 
 function getJumpLetter(lastName: string) {
   return lastName.trim().charAt(0).toLocaleUpperCase();
@@ -78,6 +79,10 @@ export function App() {
 
     return targets;
   }, [rows]);
+
+  useEffect(() => {
+    void checkForAppUpdate();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
