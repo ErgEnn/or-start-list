@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { DownloadOutlined } from "@ant-design/icons";
 import * as XLSX from "xlsx";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 import { formatEuro } from "@/lib/money";
 
 type EventCompetitorRow = {
@@ -27,6 +27,7 @@ type EventDetailPayload = {
 };
 
 export default function EventCompetitorsPage() {
+  const t = useT();
   const params = useParams<{ eventId: string }>();
   const router = useRouter();
   const eventId = params.eventId;

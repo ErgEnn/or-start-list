@@ -5,10 +5,11 @@ import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
 import { useEffect, useMemo, useState } from "react";
 import { useCompetitorSearch } from "@/lib/hooks/use-competitor-search";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 import type { SourceCompetitorImportStatus } from "@/lib/source-competitors";
 
 export default function CompetitorsPage() {
+  const t = useT();
   const { filteredRows, loading, refresh, searchInput, setSearchInput } = useCompetitorSearch();
   const [isImporting, setIsImporting] = useState(false);
   const [lastImportedAt, setLastImportedAt] = useState<string | null>(null);

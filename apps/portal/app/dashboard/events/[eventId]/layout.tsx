@@ -6,9 +6,10 @@ import Title from "antd/es/typography/Title";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 
 export default function EventDetailLayout({ children }: { children: ReactNode }) {
+  const t = useT();
   const pathname = usePathname();
   const params = useParams<{ eventId: string }>();
   const eventId = params.eventId;

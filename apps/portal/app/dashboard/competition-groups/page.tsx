@@ -5,7 +5,7 @@ import type { ColumnsType } from "antd/es/table";
 import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
 import { useEffect, useState } from "react";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 import { formatEuro } from "@/lib/money";
 
 type CompetitionGroupRow = {
@@ -26,21 +26,22 @@ type FormValues = {
   price: number;
 };
 
-function displayGender(value: "male" | "female" | null) {
-  if (value === "male") {
-    return t("competitionGroups.genderMale");
-  }
-  if (value === "female") {
-    return t("competitionGroups.genderFemale");
-  }
-  return "-";
-}
-
 function displayNumber(value: number | null) {
   return value === null ? "-" : value;
 }
 
 export default function CompetitionGroupsPage() {
+  const t = useT();
+
+  function displayGender(value: "male" | "female" | null) {
+    if (value === "male") {
+      return t("competitionGroups.genderMale");
+    }
+    if (value === "female") {
+      return t("competitionGroups.genderFemale");
+    }
+    return "-";
+  }
   const [rows, setRows] = useState<CompetitionGroupRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);

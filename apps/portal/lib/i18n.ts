@@ -1,4 +1,4 @@
-const en = {
+export const en = {
   "app.title": "OR Start List Portal",
   "app.description": "Management portal for offline-first registration devices.",
   "auth.title": "Admin Login",
@@ -71,7 +71,7 @@ const en = {
   "paymentGroups.total": "Total",
   "paymentGroups.empty": "No payment groups found.",
   "paymentGroups.name": "Name",
-  "paymentGroups.globalPriceOverride": "Global Price Override (€)",
+  "paymentGroups.globalPriceOverride": "Global Price Override (\u20ac)",
   "paymentGroups.color": "Color (Hex)",
   "paymentGroups.competitorsCount": "Competitors",
   "paymentGroups.actions": "Actions",
@@ -84,7 +84,7 @@ const en = {
   "paymentGroups.selectedCompetitors": "Selected Competitors",
   "paymentGroups.addCompetitor": "Add",
   "paymentGroups.removeCompetitor": "Remove",
-  "paymentGroups.competitorPriceOverride": "Price Override (€)",
+  "paymentGroups.competitorPriceOverride": "Price Override (\u20ac)",
   "paymentGroups.saveSuccess": "Payment group saved.",
   "paymentGroups.saveError": "Failed to save payment group.",
   "paymentGroups.deleteSuccess": "Payment group deleted.",
@@ -227,10 +227,19 @@ const en = {
   "events.createInvalid": "Name and valid date are required.",
   "events.createSuccess": "Event created.",
   "events.createError": "Failed to create event.",
+  "events.deleteTitle": "Delete Event",
+  "events.deleteDescription": "This will permanently delete the event and all its data (competitors, registrations, courses). This action cannot be undone.",
+  "events.delete": "Delete",
+  "events.deleteCancel": "Cancel",
+  "events.deleteSuccess": "Event deleted.",
+  "events.deleteError": "Failed to delete event.",
 } as const;
 
 export type TranslationKey = keyof typeof en;
+export type Translations = Record<TranslationKey, string>;
+export type Locale = "en" | "et";
 
+/** Static English-only translation for server components (metadata, etc.) */
 export function t(key: TranslationKey) {
   return en[key];
 }

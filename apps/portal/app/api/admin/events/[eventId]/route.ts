@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { db, withTransaction } from "@/lib/db";
 import { competitors, courses, events, paymentGroupCompetitors, paymentGroups, registrations, sourceCompetitors } from "@/lib/db/schema";
 import { moneyFromDb } from "@/lib/money";
 import { requireAdminSession } from "@/lib/session";
@@ -170,4 +170,27 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ e
     },
     { status: 200 },
   );
+}
+
+export async function DELETE(_: NextRequest, context: { params: Promise<{ eventId: string }> }) {
+  const unauthorized = await requireAdminSession();
+  if (unauthorized) {
+    return unauthorized;
+  }
+
+  const { eventId } = await context.params;
+
+  const deleted = await withTransaction(async (tx) => {
+    const rows = await tx
+      .delete(events)
+      .where(eq(events.eventId, eventId))
+      .returning({ eventId: events.eventId });
+    return rows.length > 0;
+  });
+
+  if (!deleted) {
+    return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ ok: true }, { status: 200 });
 }

@@ -9,7 +9,7 @@ import { DownloadOutlined, UploadOutlined } from "@ant-design/icons";
 import * as XLSX from "xlsx";
 import type { CompetitorRow } from "@/lib/competitors-indexed-db";
 import { useCompetitorSearch } from "@/lib/hooks/use-competitor-search";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 import { formatEuro } from "@/lib/money";
 
 type PaymentGroupCompetitor = {
@@ -50,6 +50,7 @@ function competitorName(item: { firstName: string | null; lastName: string | nul
 }
 
 export default function PaymentGroupsPage() {
+  const t = useT();
   const [rows, setRows] = useState<PaymentGroupRow[]>([]);
   const [loading, setLoading] = useState(true);
 

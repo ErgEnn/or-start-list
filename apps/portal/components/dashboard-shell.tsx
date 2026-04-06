@@ -1,18 +1,26 @@
 "use client";
 
 import { CalendarOutlined, DesktopOutlined, HomeOutlined, LogoutOutlined, TableOutlined, TagOutlined, TeamOutlined } from "@ant-design/icons";
-import { Button, Layout, Menu } from "antd";
+import { Button, Layout, Menu, Select, Space } from "antd";
 import Title from "antd/es/typography/Title";
 import { signOut } from "next-auth/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import React from "react";
-import { t } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n-client";
+import type { Locale } from "@/lib/i18n";
 
 const { Header, Sider, Content } = Layout;
 
+const localeOptions: Array<{ label: string; value: Locale }> = [
+  { label: "EN", value: "en" },
+  { label: "ET", value: "et" },
+];
+
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const t = useT();
+  const { locale, setLocale } = useLocale();
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -36,11 +44,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               key: "/dashboard/competitors",
               icon: <TableOutlined />,
               label: <Link href="/dashboard/competitors">{t("nav.competitors")}</Link>,
-            },
-            {
-              key: "/dashboard/rental-sis",
-              icon: <TagOutlined />,
-              label: <Link href="/dashboard/rental-sis">{t("nav.rentalSIs")}</Link>,
             },
             {
               key: "/dashboard/payment-groups",
@@ -81,9 +84,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             paddingInline: 20,
           }}
         >
-          <Button icon={<LogoutOutlined />} onClick={() => signOut({ callbackUrl: "/" })}>
-            {t("dashboard.signOut")}
-          </Button>
+          <Space>
+            <Select
+              value={locale}
+              onChange={setLocale}
+              options={localeOptions}
+              variant="borderless"
+              style={{ width: 70 }}
+            />
+            <Button icon={<LogoutOutlined />} onClick={() => signOut({ callbackUrl: "/" })}>
+              {t("dashboard.signOut")}
+            </Button>
+          </Space>
         </Header>
         <Content style={{ padding: 24 }}>{children}</Content>
       </Layout>

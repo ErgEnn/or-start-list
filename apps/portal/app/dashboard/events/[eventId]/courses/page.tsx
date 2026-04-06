@@ -4,7 +4,7 @@ import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, InputNumber, Space, message } from "antd";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 
 type CourseFormItem = {
   courseId?: string;
@@ -27,6 +27,7 @@ type CoursesPayload = {
 };
 
 export default function EventCoursesPage() {
+  const t = useT();
   const params = useParams<{ eventId: string }>();
   const router = useRouter();
   const eventId = params.eventId;

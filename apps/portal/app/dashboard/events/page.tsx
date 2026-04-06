@@ -5,7 +5,7 @@ import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 
 type EventRow = {
   eventId: string;
@@ -42,6 +42,7 @@ function sortByDateAsc(items: EventRow[]) {
 }
 
 export default function EventsPage() {
+  const t = useT();
   const [rows, setRows] = useState<EventRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);

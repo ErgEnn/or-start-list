@@ -1,9 +1,9 @@
 "use client";
 
-import { Button, Card, Form, Input, Space, message } from "antd";
+import { Button, Card, Form, Input, Popconfirm, Space, message } from "antd";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 
 type EventFormValues = {
   name: string;
@@ -19,11 +19,13 @@ type EventDetailPayload = {
 };
 
 export default function EventBasicInfoPage() {
+  const t = useT();
   const params = useParams<{ eventId: string }>();
   const router = useRouter();
   const eventId = params.eventId;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [formValues, setFormValues] = useState<EventFormValues | null>(null);
   const [form] = Form.useForm<EventFormValues>();
   const [apiMessage, contextHolder] = message.useMessage();
@@ -73,6 +75,25 @@ export default function EventBasicInfoPage() {
     }
   }
 
+  async function deleteEvent() {
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/admin/events/${encodeURIComponent(eventId)}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        apiMessage.error(t("events.deleteError"));
+        setDeleting(false);
+        return;
+      }
+      apiMessage.success(t("events.deleteSuccess"));
+      router.push("/dashboard/events");
+    } catch {
+      apiMessage.error(t("events.deleteError"));
+      setDeleting(false);
+    }
+  }
+
   useEffect(() => {
     loadEvent();
   }, [eventId]);
@@ -112,6 +133,18 @@ export default function EventBasicInfoPage() {
             <Button type="primary" loading={saving} onClick={saveBasicInfo}>
               {t("events.save")}
             </Button>
+            <Popconfirm
+              title={t("events.deleteTitle")}
+              description={t("events.deleteDescription")}
+              okText={t("events.delete")}
+              cancelText={t("events.deleteCancel")}
+              okButtonProps={{ danger: true, loading: deleting }}
+              onConfirm={deleteEvent}
+            >
+              <Button danger loading={deleting}>
+                {t("events.delete")}
+              </Button>
+            </Popconfirm>
           </Space>
         </Space>}
       </Card>

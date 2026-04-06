@@ -6,7 +6,7 @@ import Paragraph from "antd/es/typography/Paragraph";
 import Text from "antd/es/typography/Text";
 import Title from "antd/es/typography/Title";
 import { useEffect, useState } from "react";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 
 type DeviceRow = {
   id: string;
@@ -27,14 +27,15 @@ function maskApiKey(apiKey: string) {
   return apiKey.replace(/./g, "*");
 }
 
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return t("devices.never");
-  }
-  return new Date(value).toISOString();
-}
-
 export default function DevicesPage() {
+  const t = useT();
+
+  function formatDateTime(value: string | null) {
+    if (!value) {
+      return t("devices.never");
+    }
+    return new Date(value).toISOString();
+  }
   const [rows, setRows] = useState<DeviceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);

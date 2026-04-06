@@ -5,7 +5,7 @@ import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
 import { useEffect, useRef, useState } from "react";
 import { UploadOutlined } from "@ant-design/icons";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 
 type ReservedCodeRow = {
   code: string;
@@ -22,6 +22,7 @@ type ReservedCodeRow = {
 };
 
 export default function ReservedCodesPage() {
+  const t = useT();
   const [rows, setRows] = useState<ReservedCodeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);

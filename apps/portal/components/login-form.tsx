@@ -3,7 +3,7 @@
 import { Alert, Button, Card, Form, Input, Space, Typography } from "antd";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
-import { t } from "@/lib/i18n";
+import { useT } from "@/lib/i18n-client";
 
 type FormValues = {
   username: string;
@@ -11,6 +11,7 @@ type FormValues = {
 };
 
 export function LoginForm() {
+  const t = useT();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
 
