@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { competitionGroupSchema, competitorSchema, courseSchema, eventSchema, paymentGroupSchema, paymentMethodSchema, reservedCodeSchema } from "./domain";
+import { competitionGroupSchema, competitorSchema, courseSchema, eventSchema, mapPreferenceMemberSchema, paymentGroupSchema, paymentMethodSchema, reservedCodeSchema } from "./domain";
 import { competitorDeltaResponseSchema, outboxItemSchema, pullResponseSchema, pushResponseSchema } from "./sync";
 
 export const desktopSyncStatusSchema = z.object({
@@ -33,6 +33,18 @@ export const desktopRecentRegistrationSchema = z.object({
   createdAtDevice: z.string().datetime(),
 });
 
+export const allRegistrationRowSchema = z.object({
+  registrationId: z.string().uuid(),
+  competitorId: z.string().min(1),
+  eolNumber: z.string(),
+  firstName: z.string(),
+  lastName: z.string(),
+  courseId: z.string().min(1),
+  courseName: z.string().min(1),
+  paidPriceCents: z.number().int().nonnegative(),
+  createdAtDevice: z.string().datetime(),
+});
+
 export const desktopQueryCompetitorsRequestSchema = z.object({
   filterId: z.string().min(1).default("all"),
   query: z.string().default(""),
@@ -62,6 +74,7 @@ export const desktopEventStateSchema = z.object({
 export const desktopBootstrapSchema = z.object({
   events: z.array(eventSchema),
   paymentGroups: z.array(paymentGroupSchema),
+  mapPreferences: z.array(mapPreferenceMemberSchema),
   competitionGroups: z.array(competitionGroupSchema),
   syncStatus: desktopSyncStatusSchema,
   eventState: desktopEventStateSchema,
@@ -127,6 +140,7 @@ export const deviceSyncCycleResponseSchema = z.object({
   rejected: pushResponseSchema.shape.rejected,
   events: z.array(eventSchema),
   paymentGroups: z.array(paymentGroupSchema),
+  mapPreferences: z.array(mapPreferenceMemberSchema),
   competitionGroups: z.array(competitionGroupSchema),
   competitorDelta: competitorDeltaResponseSchema,
   eventSnapshots: z.array(pullResponseSchema),
@@ -136,6 +150,7 @@ export const deviceSyncCycleResponseSchema = z.object({
 export type DesktopSyncStatus = z.infer<typeof desktopSyncStatusSchema>;
 export type DesktopCompetitorRow = z.infer<typeof desktopCompetitorRowSchema>;
 export type DesktopRecentRegistration = z.infer<typeof desktopRecentRegistrationSchema>;
+export type AllRegistrationRow = z.infer<typeof allRegistrationRowSchema>;
 export type DesktopQueryCompetitorsRequest = z.infer<typeof desktopQueryCompetitorsRequestSchema>;
 export type DesktopQueryCompetitorsResponse = z.infer<typeof desktopQueryCompetitorsResponseSchema>;
 export type SelectedRegistrationInfo = z.infer<typeof selectedRegistrationInfoSchema>;

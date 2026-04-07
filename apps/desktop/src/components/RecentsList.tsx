@@ -1,18 +1,22 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Accordion, AccordionDetails, AccordionSummary, Box, ButtonBase, Typography } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { DesktopRecentRegistration } from '@or/shared';
+import { AllRegistrationsDialog } from './AllRegistrationsDialog';
 import { t } from '../i18n';
 
 type RecentsListProps = {
   registrations: DesktopRecentRegistration[];
   loading: boolean;
+  eventId: string;
   onSelectRegistration: (competitorId: string) => void;
+  onOpenCompetitor: (competitorId: string) => void;
 };
 
-export function RecentsList({ registrations, loading, onSelectRegistration }: RecentsListProps) {
+export function RecentsList({ registrations, loading, eventId, onSelectRegistration, onOpenCompetitor }: RecentsListProps) {
   const lastItemRef = useRef<HTMLButtonElement | null>(null);
   const visibleRegistrations = useMemo(() => registrations, [registrations]);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   useEffect(() => {
     lastItemRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -27,9 +31,18 @@ export function RecentsList({ registrations, loading, onSelectRegistration }: Re
         '&::before': { display: 'none' },
       }}
     >
-      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 0, '& .MuiAccordionSummary-content': { my: 0.75 } }}>
+      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 0, '& .MuiAccordionSummary-content': { my: 0.75, alignItems: 'center' } }}>
         <Typography variant='subtitle2'>
           {t('recent_registrations', { count: visibleRegistrations.length })}
+        </Typography>
+        <Typography
+          component='span'
+          variant='caption'
+          color='primary'
+          onClick={(e) => { e.stopPropagation(); setDialogOpen(true); }}
+          sx={{ ml: 'auto', mr: 1, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
+        >
+          {t('see_all')}
         </Typography>
       </AccordionSummary>
       <AccordionDetails sx={{ p: 0, maxHeight: '12rem', overflow: 'hidden', display: 'flex' }}>
@@ -96,6 +109,7 @@ export function RecentsList({ registrations, loading, onSelectRegistration }: Re
           </Box>
         </Box>
       </AccordionDetails>
+      <AllRegistrationsDialog open={dialogOpen} eventId={eventId} onClose={() => setDialogOpen(false)} onSelectCompetitor={onOpenCompetitor} />
     </Accordion>
   );
 }

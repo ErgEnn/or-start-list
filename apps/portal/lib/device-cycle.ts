@@ -1,14 +1,15 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, countDistinct, desc, eq } from "drizzle-orm";
 import type {
   CompetitionGroupsResponse,
   DeviceSyncCycleRequest,
   DeviceSyncCycleResponse,
+  MapPreferencesResponse,
   PaymentGroupsResponse,
 } from "@or/shared";
-import { competitionGroupsResponseSchema, paymentGroupsResponseSchema } from "@or/shared";
+import { competitionGroupsResponseSchema, mapPreferencesResponseSchema, paymentGroupsResponseSchema } from "@or/shared";
 import { getSourceCompetitorChanges } from "@/lib/source-competitors";
 import type { DbLike } from "./db";
-import { competitionGroups, events, paymentGroupCompetitors, paymentGroups, reservedCodes } from "./db/schema";
+import { competitionGroups, events, mapPreferences, paymentGroupCompetitors, paymentGroups, registrations, reservedCodes } from "./db/schema";
 import { moneyFromDb } from "./money";
 import { applyOutboxItems, loadEventDataset } from "./sync";
 
@@ -24,28 +25,42 @@ async function loadEventsSnapshot(client: DbLike) {
 }
 
 async function loadPaymentGroupsSnapshot(client: DbLike): Promise<PaymentGroupsResponse["paymentGroups"]> {
-  const [groupRows, memberRows] = await Promise.all([
+  const [groupRows, memberRows, eventCountRows] = await Promise.all([
     client
       .select({
         paymentGroupId: paymentGroups.paymentGroupId,
         name: paymentGroups.name,
         colorHex: paymentGroups.colorHex,
-        globalPriceOverrideCents: paymentGroups.globalPriceOverrideCents,
+        globalPriceOverride: paymentGroups.globalPriceOverride,
+        sortOrder: paymentGroups.sortOrder,
       })
       .from(paymentGroups)
-      .orderBy(asc(paymentGroups.name), asc(paymentGroups.paymentGroupId)),
+      .orderBy(desc(paymentGroups.sortOrder), asc(paymentGroups.name), asc(paymentGroups.paymentGroupId)),
     client
       .select({
         paymentGroupId: paymentGroupCompetitors.paymentGroupId,
         competitorId: paymentGroupCompetitors.competitorId,
         priceOverrideCents: paymentGroupCompetitors.priceOverrideCents,
+        compensatedEvents: paymentGroupCompetitors.compensatedEvents,
       })
       .from(paymentGroupCompetitors)
       .orderBy(asc(paymentGroupCompetitors.paymentGroupId), asc(paymentGroupCompetitors.competitorId)),
+    client
+      .select({
+        competitorId: registrations.competitorId,
+        eventCount: countDistinct(registrations.eventId).mapWith(Number),
+      })
+      .from(registrations)
+      .groupBy(registrations.competitorId),
   ]);
 
+  const eventCountMap = new Map<string, number>();
+  for (const row of eventCountRows) {
+    eventCountMap.set(row.competitorId, row.eventCount);
+  }
+
   const competitorIdsByGroup = new Map<string, string[]>();
-  const competitorsByGroup = new Map<string, Array<{ competitorId: string; priceOverrideCents: number | null }>>();
+  const competitorsByGroup = new Map<string, Array<{ competitorId: string; priceOverrideCents: number | null; compensatedEvents: number | null; eventsAttended: number }>>();
   for (const row of memberRows) {
     const current = competitorIdsByGroup.get(row.paymentGroupId) ?? [];
     current.push(row.competitorId);
@@ -55,16 +70,19 @@ async function loadPaymentGroupsSnapshot(client: DbLike): Promise<PaymentGroupsR
     competitorRows.push({
       competitorId: row.competitorId,
       priceOverrideCents: moneyFromDb(row.priceOverrideCents),
+      compensatedEvents: row.compensatedEvents,
+      eventsAttended: eventCountMap.get(row.competitorId) ?? 0,
     });
     competitorsByGroup.set(row.paymentGroupId, competitorRows);
   }
 
   return paymentGroupsResponseSchema.parse({
-    paymentGroups: groupRows.map((group: { paymentGroupId: string; name: string; colorHex: string | null; globalPriceOverrideCents: unknown }) => ({
+    paymentGroups: groupRows.map((group: { paymentGroupId: string; name: string; colorHex: string | null; globalPriceOverride: unknown; sortOrder: number }) => ({
       paymentGroupId: group.paymentGroupId,
       name: group.name,
       colorHex: group.colorHex,
-      globalPriceOverrideCents: moneyFromDb(group.globalPriceOverrideCents),
+      globalPriceOverride: moneyFromDb(group.globalPriceOverride),
+      sortOrder: group.sortOrder,
       competitorIds: competitorIdsByGroup.get(group.paymentGroupId) ?? [],
       competitors: competitorsByGroup.get(group.paymentGroupId) ?? [],
     })),
@@ -94,6 +112,18 @@ async function loadCompetitionGroupsSnapshot(client: DbLike): Promise<Competitio
   }).competitionGroups;
 }
 
+async function loadMapPreferencesSnapshot(client: DbLike): Promise<MapPreferencesResponse["mapPreferences"]> {
+  const rows = await client
+    .select({
+      competitorId: mapPreferences.competitorId,
+      courseName: mapPreferences.courseName,
+      waterproofMap: mapPreferences.waterproofMap,
+    })
+    .from(mapPreferences);
+
+  return mapPreferencesResponseSchema.parse({ mapPreferences: rows }).mapPreferences;
+}
+
 async function loadReservedCodesSnapshot(client: DbLike) {
   const rows = await client
     .select({
@@ -112,9 +142,10 @@ export async function loadDeviceCycle(
   request: DeviceSyncCycleRequest,
 ): Promise<DeviceSyncCycleResponse> {
   const pushResult = await applyOutboxItems(client, deviceId, request.pendingRegistrations);
-  const [eventRows, paymentGroupRows, competitionGroupRows, competitorDelta, reservedCodeRows] = await Promise.all([
+  const [eventRows, paymentGroupRows, mapPreferenceRows, competitionGroupRows, competitorDelta, reservedCodeRows] = await Promise.all([
     loadEventsSnapshot(client),
     loadPaymentGroupsSnapshot(client),
+    loadMapPreferencesSnapshot(client),
     loadCompetitionGroupsSnapshot(client),
     getSourceCompetitorChanges(request.sinceCompetitorVersion),
     loadReservedCodesSnapshot(client),
@@ -135,6 +166,7 @@ export async function loadDeviceCycle(
     rejected: pushResult.rejected,
     events: eventRows,
     paymentGroups: paymentGroupRows,
+    mapPreferences: mapPreferenceRows,
     competitionGroups: competitionGroupRows,
     competitorDelta,
     eventSnapshots,

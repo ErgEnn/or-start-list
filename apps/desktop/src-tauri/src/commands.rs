@@ -4,14 +4,14 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::database::{
     claim_reserved_code, clear_registration, conn, create_registration, emit_sync_status, init_schema,
-    load_available_reserved_codes, load_competition_groups, load_device_config_map, load_event_state,
-    load_events, load_payment_groups, load_sync_status_from_db, query_competitors,
-    refresh_in_memory_sync_status, save_competition_group_selection, select_startup_event_id,
-    update_registration_payment, upsert_device_config_value, AppState,
+    load_all_registrations, load_available_reserved_codes, load_competition_groups, load_device_config_map,
+    load_event_state, load_events, load_map_preferences, load_payment_groups, load_sync_status_from_db, query_competitors,
+    refresh_in_memory_sync_status, reset_competitor_sync_state, save_competition_group_selection,
+    ensure_selected_event_id, update_registration_payment, upsert_device_config_value, AppState,
 };
 use crate::si_reader::{self, SiReaderState};
 use crate::models::{
-    DesktopBootstrapResponse, DesktopClaimReservedCodeRequest, DesktopClearRegistrationRequest,
+    AllRegistrationRow, DesktopBootstrapResponse, DesktopClaimReservedCodeRequest, DesktopClearRegistrationRequest,
     DesktopCreateRegistrationRequest, DesktopCreateRegistrationResponse, DesktopEventState,
     DesktopUpdateRegistrationPaymentRequest,
     DesktopQueryCompetitorsRequest, DesktopQueryCompetitorsResponse,
@@ -39,10 +39,11 @@ pub fn set_device_config(state: State<AppState>, key: String, value: String) -> 
 #[tauri::command]
 pub fn desktop_bootstrap(state: State<AppState>) -> Result<DesktopBootstrapResponse, String> {
     let mut db = conn(&state)?;
-    let selected_event_id = select_startup_event_id(&mut db)?;
+    let selected_event_id = ensure_selected_event_id(&mut db)?;
     Ok(DesktopBootstrapResponse {
         events: load_events(&mut db)?,
         payment_groups: load_payment_groups(&mut db)?,
+        map_preferences: load_map_preferences(&mut db)?,
         competition_groups: load_competition_groups(&mut db)?,
         sync_status: load_sync_status_from_db(&mut db)?,
         event_state: load_event_state(&mut db, &selected_event_id)?,
@@ -133,6 +134,15 @@ pub async fn desktop_update_registration_payment(
 }
 
 #[tauri::command]
+pub fn desktop_get_all_registrations(
+    state: State<AppState>,
+    event_id: String,
+) -> Result<Vec<AllRegistrationRow>, String> {
+    let mut db = conn(&state)?;
+    load_all_registrations(&mut db, &event_id)
+}
+
+#[tauri::command]
 pub fn desktop_get_reserved_codes(state: State<AppState>) -> Result<Vec<ReservedCodePayload>, String> {
     let mut db = conn(&state)?;
     load_available_reserved_codes(&mut db)
@@ -164,6 +174,15 @@ pub fn desktop_get_sync_status(app: AppHandle) -> Result<DesktopSyncStatus, Stri
 
 #[tauri::command]
 pub async fn desktop_force_sync(app: AppHandle) -> Result<(), String> {
+    crate::sync::run_sync_cycle(&app).await
+}
+
+#[tauri::command]
+pub async fn desktop_refresh_competitors(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    {
+        let mut db = conn(&state)?;
+        reset_competitor_sync_state(&mut db)?;
+    }
     crate::sync::run_sync_cycle(&app).await
 }
 

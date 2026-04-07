@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import {
   Dialog,
   DialogActions,
@@ -26,7 +27,7 @@ function formatEventLabel(event: Event) {
   return event.startDate ? `${event.name} (${event.startDate})` : event.name;
 }
 
-export function EventSelectionDialog({
+export const EventSelectionDialog = memo(function EventSelectionDialog({
   open,
   events,
   selectedEventId,
@@ -72,4 +73,4 @@ export function EventSelectionDialog({
       ) : null}
     </Dialog>
   );
-}
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import Fuse from "fuse.js";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   dropCompetitorsDb,
   getAllCompetitors,
@@ -10,7 +10,7 @@ import {
 } from "@/lib/competitors-indexed-db";
 
 const COMPETITOR_VERSION_KEY = "or.portal.competitors.version";
-const SEARCH_KEYS: Array<keyof CompetitorRow> = ["eolNumber", "firstName", "lastName", "club", "siCard"];
+const SEARCH_KEYS: Array<keyof CompetitorRow> = ["eolNumber", "firstName", "lastName", "siCard"];
 
 type CompetitorChangePayload = {
   latestRowVersion: number;
@@ -113,27 +113,18 @@ function buildAllTermsExpression(query: string) {
 
   return {
     $and: terms.map((term) => ({
-      $or: SEARCH_KEYS.map((key) => ({ [key]: term })),
+      $or: SEARCH_KEYS.map((key) => ({ [key]: `^${term}` })),
     })),
   };
 }
 
-function filterRows(rows: CompetitorRow[], query: string) {
-  const expression = buildAllTermsExpression(query);
-  if (!expression) {
-    return rows;
-  }
-
-  const fuse = new Fuse(rows, {
-    threshold: 0.33,
-    includeScore: true,
-    ignoreLocation: true,
-    useExtendedSearch: true,
-    keys: SEARCH_KEYS,
-  });
-
-  return fuse.search(expression).map((result) => result.item);
-}
+const FUSE_OPTIONS = {
+  threshold: 0.33,
+  includeScore: true,
+  ignoreLocation: true,
+  useExtendedSearch: true,
+  keys: SEARCH_KEYS,
+} as const;
 
 type UseCompetitorSearchOptions = {
   excludedCompetitorIds?: string[];
@@ -145,18 +136,23 @@ export function useCompetitorSearch(options?: UseCompetitorSearchOptions) {
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [cachedVersion, setCachedVersion] = useState<number>(0);
+  const [serverVersion, setServerVersion] = useState<number | null>(null);
 
   const renewFromServer = useCallback(
     async (cachedRowsCount = 0) => {
-      const cachedVersion = readCachedVersion();
-      const probe = await fetchChanges(cachedVersion);
+      const localVersion = readCachedVersion();
+      setCachedVersion(localVersion);
+      const probe = await fetchChanges(localVersion);
+      setServerVersion(probe.latestRowVersion);
 
-      if (probe.latestRowVersion <= cachedVersion) {
+      if (probe.latestRowVersion <= localVersion) {
         if (probe.latestRowVersion === 0 && cachedRowsCount === 0) {
           const legacyRows = await fetchLegacyAllRows();
           await replaceCompetitors(legacyRows);
           setAllRows(legacyRows);
           writeCachedVersion(0);
+          setCachedVersion(0);
         }
         return;
       }
@@ -167,11 +163,13 @@ export function useCompetitorSearch(options?: UseCompetitorSearchOptions) {
         const legacyRows = await fetchLegacyAllRows();
         await replaceCompetitors(legacyRows);
         writeCachedVersion(0);
+        setCachedVersion(0);
         setAllRows(legacyRows);
         return;
       }
       await replaceCompetitors(fullSnapshot.competitors);
       writeCachedVersion(fullSnapshot.latestRowVersion);
+      setCachedVersion(fullSnapshot.latestRowVersion);
       setAllRows(fullSnapshot.competitors);
     },
     [],
@@ -186,11 +184,13 @@ export function useCompetitorSearch(options?: UseCompetitorSearchOptions) {
         const legacyRows = await fetchLegacyAllRows();
         await replaceCompetitors(legacyRows);
         writeCachedVersion(0);
+        setCachedVersion(0);
         setAllRows(legacyRows);
         return;
       }
       await replaceCompetitors(fullSnapshot.competitors);
       writeCachedVersion(fullSnapshot.latestRowVersion);
+      setCachedVersion(fullSnapshot.latestRowVersion);
       setAllRows(fullSnapshot.competitors);
     } finally {
       setLoading(false);
@@ -221,15 +221,37 @@ export function useCompetitorSearch(options?: UseCompetitorSearchOptions) {
     }
 
     load();
+
+    const interval = setInterval(async () => {
+      if (cancelled) return;
+      try {
+        await renewFromServer();
+      } catch {
+        // Silently ignore polling failures.
+      }
+    }, 600_000);
+
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [renewFromServer]);
 
+  const fuseRef = useRef<{ rows: CompetitorRow[]; fuse: Fuse<CompetitorRow> } | null>(null);
+
   const filteredRows = useMemo(() => {
     const excluded = new Set(excludedCompetitorIds);
-    const sourceRows = excluded.size > 0 ? allRows.filter((row) => !excluded.has(row.competitorId)) : allRows;
-    return filterRows(sourceRows, searchQuery);
+
+    if (!fuseRef.current || fuseRef.current.rows !== allRows) {
+      fuseRef.current = { rows: allRows, fuse: new Fuse(allRows, FUSE_OPTIONS) };
+    }
+
+    const expression = searchQuery.trim().length >= 2 ? buildAllTermsExpression(searchQuery) : null;
+    const rows = expression
+      ? fuseRef.current.fuse.search(expression, { limit: 200 }).map((result) => result.item)
+      : allRows;
+
+    return excluded.size > 0 ? rows.filter((row) => !excluded.has(row.competitorId)) : rows;
   }, [allRows, excludedCompetitorIds, searchQuery]);
 
   return {
@@ -239,5 +261,7 @@ export function useCompetitorSearch(options?: UseCompetitorSearchOptions) {
     setSearchInput,
     loading,
     refresh,
+    cachedVersion,
+    serverVersion,
   };
 }

@@ -10,13 +10,15 @@ CREATE TABLE IF NOT EXISTS payment_groups (
   payment_group_id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   color_hex TEXT,
-  global_price_override_cents INTEGER
+  global_price_override INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS payment_group_members (
   payment_group_id TEXT NOT NULL,
   competitor_id TEXT NOT NULL,
   price_override_cents INTEGER,
+  compensated_events INTEGER,
+  events_attended INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (payment_group_id, competitor_id)
 );
 CREATE INDEX IF NOT EXISTS payment_group_members_competitor_idx
@@ -139,6 +141,12 @@ CREATE TABLE IF NOT EXISTS competition_group_selections (
 );
 CREATE INDEX IF NOT EXISTS competition_group_selections_event_idx
   ON competition_group_selections(event_id);
+
+CREATE TABLE IF NOT EXISTS map_preferences (
+  competitor_id TEXT PRIMARY KEY,
+  course_name TEXT NOT NULL,
+  waterproof_map INTEGER NOT NULL DEFAULT 0
+);
 
 INSERT OR IGNORE INTO sync_meta(singleton, last_competitor_version, last_successful_sync_at, last_sync_error, worker_status)
 VALUES (1, 0, NULL, NULL, 'idle');

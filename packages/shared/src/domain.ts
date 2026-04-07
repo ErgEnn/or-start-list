@@ -49,6 +49,8 @@ export const pricingRuleSchema = z.object({
 export const paymentGroupMemberSchema = z.object({
   competitorId: z.string().min(1),
   priceOverrideCents: z.number().int().nonnegative().nullable(),
+  compensatedEvents: z.number().int().nonnegative().nullable().optional(),
+  eventsAttended: z.number().int().nonnegative().optional(),
 });
 
 export const competitionGroupSchema = z.object({
@@ -59,11 +61,22 @@ export const competitionGroupSchema = z.object({
   priceCents: z.number().int().nonnegative(),
 });
 
+export const mapPreferenceMemberSchema = z.object({
+  competitorId: z.string().min(1),
+  courseName: z.string(),
+  waterproofMap: z.boolean(),
+});
+
+export const mapPreferencesResponseSchema = z.object({
+  mapPreferences: z.array(mapPreferenceMemberSchema),
+});
+
 export const paymentGroupSchema = z.object({
   paymentGroupId: z.string().min(1),
   name: z.string().min(1),
   colorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
-  globalPriceOverrideCents: z.number().int().nonnegative().nullable(),
+  globalPriceOverride: z.number().nonnegative().nullable(),
+  sortOrder: z.number().int().default(0),
   competitorIds: z.array(z.string().min(1)),
   competitors: z.array(paymentGroupMemberSchema),
 });
@@ -123,6 +136,8 @@ export type Course = z.infer<typeof courseSchema>;
 export type Event = z.infer<typeof eventSchema>;
 export type QuickFilter = z.infer<typeof quickFilterSchema>;
 export type PricingRule = z.infer<typeof pricingRuleSchema>;
+export type MapPreferenceMember = z.infer<typeof mapPreferenceMemberSchema>;
+export type MapPreferencesResponse = z.infer<typeof mapPreferencesResponseSchema>;
 export type PaymentGroupMember = z.infer<typeof paymentGroupMemberSchema>;
 export type CompetitionGroup = z.infer<typeof competitionGroupSchema>;
 export type PaymentGroup = z.infer<typeof paymentGroupSchema>;

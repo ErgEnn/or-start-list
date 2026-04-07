@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarOutlined, DesktopOutlined, HomeOutlined, LogoutOutlined, TableOutlined, TagOutlined, TeamOutlined } from "@ant-design/icons";
+import { CalendarOutlined, CompassOutlined, DesktopOutlined, HomeOutlined, LogoutOutlined, TableOutlined, TagOutlined, TeamOutlined } from "@ant-design/icons";
 import { Button, Layout, Menu, Select, Space } from "antd";
 import Title from "antd/es/typography/Title";
 import { signOut } from "next-auth/react";
@@ -49,6 +49,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               key: "/dashboard/payment-groups",
               icon: <TeamOutlined />,
               label: <Link href="/dashboard/payment-groups">{t("nav.paymentGroups")}</Link>,
+            },
+            {
+              key: "/dashboard/map-preferences",
+              icon: <CompassOutlined />,
+              label: <Link href="/dashboard/map-preferences">{t("nav.mapPreferences")}</Link>,
             },
             {
               key: "/dashboard/competition-groups",

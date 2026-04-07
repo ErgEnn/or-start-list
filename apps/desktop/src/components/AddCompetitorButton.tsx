@@ -24,6 +24,7 @@ import type {
   CompetitionGroup,
   Course,
   DesktopCreateRegistrationResponse,
+  MapPreferenceMember,
   ReservedCode,
 } from "@or/shared";
 import { desktopGetReservedCodes, desktopClaimReservedCode } from "../lib/desktop";
@@ -33,6 +34,7 @@ import { type ModalLang, modalT } from "./addCompetitorTranslations";
 type AddCompetitorButtonProps = {
   courses: Course[];
   competitionGroups: CompetitionGroup[];
+  mapPreferences: MapPreferenceMember[];
   selectedEventId: string;
   onClaimed: (response: DesktopCreateRegistrationResponse) => void;
 };
@@ -81,6 +83,7 @@ function formatPrice(cents: number): string {
 export function AddCompetitorButton({
   courses,
   competitionGroups,
+  mapPreferences: _mapPreferences,
   selectedEventId,
   onClaimed,
 }: AddCompetitorButtonProps) {

@@ -1,20 +1,13 @@
-import { forwardRef, memo, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-} from '@mui/material';
-import type { CompetitionGroup, Course, DesktopCompetitorRow, PaymentGroup, SelectedRegistrationInfo } from '@or/shared';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Paper } from '@mui/material';
+import type { CompetitionGroup, Course, DesktopCompetitorRow, MapPreferenceMember, PaymentGroup, SelectedRegistrationInfo } from '@or/shared';
 import { t } from '../i18n';
 import { CompetitorDetailDialog } from './CompetitorDetailDialog';
 
 type MainListProps = {
   rows: DesktopCompetitorRow[];
   paymentGroups: PaymentGroup[];
+  mapPreferences: MapPreferenceMember[];
   competitionGroups: CompetitionGroup[];
   selectedFilter: string;
   showDobColumn: boolean;
@@ -30,11 +23,18 @@ type MainListProps = {
   onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
   onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: "cash" | "prepaid" | "stebby" | "debt" | "other") => Promise<void>;
   onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: "cash" | "prepaid" | "stebby" | "debt" | "other") => Promise<void>;
+  openCompetitorId: { competitorId: string; token: number } | null;
 };
+
+const cellPadding = '6px 16px';
+const colCode: React.CSSProperties = { flex: '0 0 15%', padding: cellPadding };
+const colName: React.CSSProperties = { flex: '1 1 0', padding: cellPadding };
+
 
 export const MainList = memo(function MainList({
   rows,
   paymentGroups,
+  mapPreferences,
   competitionGroups,
   selectedFilter,
   showDobColumn,
@@ -50,23 +50,22 @@ export const MainList = memo(function MainList({
   onSelectCompetitionGroup,
   onSelectCourse,
   onUpdateRegistrationPayment,
+  openCompetitorId,
 }: MainListProps) {
-  const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
   const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | null>(null);
+
   const colorByCompetitorId = useMemo(() => {
     const next = new Map<string, string>();
-
     for (const group of paymentGroups) {
-      if (!group.colorHex) {
-        continue;
-      }
+      if (!group.colorHex) continue;
       for (const competitorId of group.competitorIds) {
         if (!next.has(competitorId)) {
           next.set(competitorId, group.colorHex);
         }
       }
     }
-
     return next;
   }, [paymentGroups]);
 
@@ -75,83 +74,108 @@ export const MainList = memo(function MainList({
     [courses],
   );
 
-  useEffect(() => {
-    if (!scrollTarget?.competitorId) {
-      return;
-    }
+  const mapPreferenceByCompetitorId = useMemo(
+    () => new Map(mapPreferences.map((pref) => [pref.competitorId, pref])),
+    [mapPreferences],
+  );
 
-    const row = rowRefs.current.get(scrollTarget.competitorId);
-    row?.scrollIntoView({ block: 'center' });
+  useEffect(() => {
+    if (!scrollTarget?.competitorId) return;
+    const el = rowRefs.current.get(scrollTarget.competitorId);
+    el?.scrollIntoView({ block: 'center' });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollTarget?.token]);
+
+  useEffect(() => {
+    if (openCompetitorId?.competitorId) {
+      setSelectedCompetitorId(openCompetitorId.competitorId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openCompetitorId?.token]);
 
   const selectedCompetitor = useMemo(
     () => rows.find((row) => row.competitorId === selectedCompetitorId) ?? null,
     [rows, selectedCompetitorId],
   );
 
+  const setRowRef = useCallback((competitorId: string, el: HTMLDivElement | null) => {
+    if (el) {
+      rowRefs.current.set(competitorId, el);
+    } else {
+      rowRefs.current.delete(competitorId);
+    }
+  }, []);
+
+  const fontSize = `${textScale}rem`;
+
   return (
     <>
-      <TableContainer
-        component={Paper}
-        sx={{ height: '100%', minHeight: 0, overflowY: 'auto' }}
-      >
-        <Table stickyHeader>
-          <TableHead>
-            <TableRow>
-              <TableCell>{t('eol_code')}</TableCell>
-              <TableCell>{t('first_name')}</TableCell>
-              <TableCell>{t('last_name')}</TableCell>
-              {showDobColumn ? <TableCell>{t('dob')}</TableCell> : null}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {loading && rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={showDobColumn ? 4 : 3} align='center'>
-                  {t('loading_competitors')}
-                </TableCell>
-              </TableRow>
-            ) : null}
-            {rows.map((item) => {
-              const isLetterHighlighted =
-                highlightedLetter !== null &&
-                item.lastName.trim().charAt(0).toLocaleUpperCase() === highlightedLetter;
-              const isFocused = highlightedCompetitorId === item.competitorId;
-              const hasSelectedCourse = Boolean(selectedCoursesByCompetitor[item.competitorId]);
+      <Paper style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* Header — outside scroll container */}
+        <div style={{ display: 'flex', borderBottom: '2px solid #e0e0e0', fontSize, fontWeight: 500, flexShrink: 0 }}>
+          <div style={colCode}>{t('eol_code')}</div>
+          <div style={colName}>{t('first_name')}</div>
+          <div style={colName}>{t('last_name')}</div>
+          {showDobColumn ? <div style={colName}>{t('dob')}</div> : null}
+        </div>
 
-              return (
-                <CompetitorTableRow
-                  key={item.competitorId}
-                  item={item}
-                  ref={(element) => {
-                    if (element) {
-                      rowRefs.current.set(item.competitorId, element);
-                      return;
-                    }
+        {/* Scrollable body */}
+        <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {loading && rows.length === 0 ? (
+            <div style={{ padding: cellPadding, textAlign: 'center', fontSize }}>{t('loading_competitors')}</div>
+          ) : null}
 
-                    rowRefs.current.delete(item.competitorId);
-                  }}
-                  hasSelectedCourse={hasSelectedCourse}
-                  isLetterHighlighted={isLetterHighlighted}
-                  isFocused={isFocused}
-                  rowColor={selectedFilter === 'all' ? colorByCompetitorId.get(item.competitorId) ?? null : null}
-                  showDobColumn={showDobColumn}
-                  textScale={textScale}
-                  onClick={() => setSelectedCompetitorId(item.competitorId)}
-                />
-              );
-            })}
-            {!loading && rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={showDobColumn ? 4 : 3} align='center'>
-                  {t('no_competitors_found')}
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
-      </TableContainer>
+          {rows.map((item) => {
+            const rowColor = selectedFilter === 'all' ? colorByCompetitorId.get(item.competitorId) ?? null : null;
+            const hasSelectedCourse = Boolean(selectedCoursesByCompetitor[item.competitorId]);
+            const isFocused = highlightedCompetitorId === item.competitorId;
+            const isLetterHighlighted =
+              highlightedLetter !== null &&
+              item.lastName.trim().charAt(0).toLocaleUpperCase() === highlightedLetter;
+
+            const bgColor = isFocused
+              ? '#fff3e0'
+              : rowColor
+                ? lightenHex(rowColor, hasSelectedCourse ? 0.3 : 0.12)
+                : undefined;
+            const textColor = rowColor && !isFocused
+              ? getContrastingTextColor(bgColor!)
+              : hasSelectedCourse ? '#ddd' : undefined;
+
+            return (
+              <div
+                key={item.competitorId}
+                ref={(el) => setRowRef(item.competitorId, el)}
+                className="competitor-row"
+                onClick={() => setSelectedCompetitorId(item.competitorId)}
+                style={{
+                  display: 'flex',
+                  cursor: 'pointer',
+                  borderBottom: '1px solid #eee',
+                  backgroundColor: bgColor,
+                  color: textColor,
+                  fontSize,
+                }}
+              >
+                <div style={colCode}>{item.eolNumber}</div>
+                <div style={colName}>{item.firstName}</div>
+                <div style={colName}>
+                  {isLetterHighlighted && item.lastName.length > 0 ? (
+                    <><span style={{ backgroundColor: '#FFD600', borderRadius: 2 }}>{item.lastName.charAt(0)}</span>{item.lastName.slice(1)}</>
+                  ) : (
+                    item.lastName
+                  )}
+                </div>
+                {showDobColumn ? <div style={colName}>{item.dob ?? '—'}</div> : null}
+              </div>
+            );
+          })}
+
+          {!loading && rows.length === 0 ? (
+            <div style={{ padding: cellPadding, textAlign: 'center', fontSize }}>{t('no_competitors_found')}</div>
+          ) : null}
+        </div>
+      </Paper>
 
       {selectedCompetitor ? (
         <CompetitorDetailDialog
@@ -159,6 +183,7 @@ export const MainList = memo(function MainList({
           allCompetitionGroups={competitionGroups}
           courses={courses}
           courseNameById={courseNameById}
+          mapPreference={mapPreferenceByCompetitorId.get(selectedCompetitor.competitorId) ?? null}
           textScale={textScale}
           selectedCourseId={selectedCoursesByCompetitor[selectedCompetitor.competitorId] ?? null}
           selectedRegistration={selectedRegistrationsByCompetitor[selectedCompetitor.competitorId] ?? null}
@@ -172,84 +197,6 @@ export const MainList = memo(function MainList({
     </>
   );
 });
-
-type CompetitorTableRowProps = {
-  item: DesktopCompetitorRow;
-  hasSelectedCourse: boolean;
-  isLetterHighlighted: boolean;
-  isFocused: boolean;
-  rowColor: string | null;
-  showDobColumn: boolean;
-  textScale: number;
-  onClick: () => void;
-};
-
-const CompetitorTableRow = memo(forwardRef<HTMLTableRowElement, CompetitorTableRowProps>(
-  function CompetitorTableRow({
-    item,
-    hasSelectedCourse,
-    isLetterHighlighted,
-    isFocused,
-    rowColor,
-    showDobColumn,
-    textScale,
-    onClick,
-  }, ref) {
-    const rowBackgroundColor = isFocused
-      ? 'warning.light'
-      : rowColor
-        ? lightenHex(rowColor, hasSelectedCourse ? 0.3 : 0.12)
-        : 'inherit';
-    const rowHoverColor = isFocused
-      ? 'warning.light'
-      : rowColor
-        ? lightenHex(rowColor, hasSelectedCourse ? 0.36 : 0.2)
-        : 'action.hover';
-
-    return (
-      <TableRow
-        ref={ref}
-        hover
-        onClick={onClick}
-        sx={{
-          cursor: 'pointer',
-          color: rowColor ? getContrastingTextColor(rowBackgroundColor) : hasSelectedCourse ? '#ddd' : 'text.primary',
-          backgroundColor: rowBackgroundColor,
-          '&:hover': {
-            backgroundColor: rowHoverColor,
-          },
-          '& > *': {
-            color: 'inherit',
-            fontSize: `${textScale}rem`,
-          },
-          '& > .MuiTableCell-root': {
-            color: 'inherit',
-            fontSize: `${textScale}rem`,
-          },
-        }}
-      >
-        <TableCell>{item.eolNumber}</TableCell>
-        <TableCell>{item.firstName}</TableCell>
-        <TableCell>
-          {isLetterHighlighted && item.lastName.length > 0 ? (
-            <><span style={{ backgroundColor: '#FFD600', borderRadius: 2 }}>{item.lastName.charAt(0)}</span>{item.lastName.slice(1)}</>
-          ) : (
-            item.lastName
-          )}
-        </TableCell>
-        {showDobColumn ? <TableCell>{item.dob ?? '—'}</TableCell> : null}
-      </TableRow>
-    );
-  }),
-  (previousProps, nextProps) =>
-    previousProps.item === nextProps.item &&
-    previousProps.hasSelectedCourse === nextProps.hasSelectedCourse &&
-    previousProps.isLetterHighlighted === nextProps.isLetterHighlighted &&
-    previousProps.isFocused === nextProps.isFocused &&
-    previousProps.rowColor === nextProps.rowColor &&
-    previousProps.showDobColumn === nextProps.showDobColumn &&
-    previousProps.textScale === nextProps.textScale,
-);
 
 function lightenHex(colorHex: string, amount: number) {
   const normalized = colorHex.replace('#', '');

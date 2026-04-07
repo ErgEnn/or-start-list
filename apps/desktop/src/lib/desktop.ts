@@ -2,6 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { z } from "zod";
 import {
+  allRegistrationRowSchema,
   desktopBootstrapSchema,
   desktopClearRegistrationResponseSchema,
   desktopCreateRegistrationResponseSchema,
@@ -21,6 +22,7 @@ import {
   type DesktopQueryCompetitorsResponse,
   type DesktopSetCompetitionGroupRequest,
   type DesktopSyncStatus,
+  type AllRegistrationRow,
   type DesktopUpdateRegistrationPaymentRequest,
   type ReservedCode,
 } from "@or/shared";
@@ -86,12 +88,22 @@ export async function desktopClaimReservedCode(
   );
 }
 
+export async function desktopGetAllRegistrations(eventId: string): Promise<AllRegistrationRow[]> {
+  return z.array(allRegistrationRowSchema).parse(
+    await invoke("desktop_get_all_registrations", { eventId }),
+  );
+}
+
 export async function desktopGetSyncStatus(): Promise<DesktopSyncStatus> {
   return desktopSyncStatusSchema.parse(await invoke("desktop_get_sync_status"));
 }
 
 export async function desktopForceSync(): Promise<void> {
   await invoke("desktop_force_sync");
+}
+
+export async function desktopRefreshCompetitors(): Promise<void> {
+  await invoke("desktop_refresh_competitors");
 }
 
 export async function onDesktopSyncStatus(

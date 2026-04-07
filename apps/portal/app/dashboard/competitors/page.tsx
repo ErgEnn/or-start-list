@@ -10,7 +10,7 @@ import type { SourceCompetitorImportStatus } from "@/lib/source-competitors";
 
 export default function CompetitorsPage() {
   const t = useT();
-  const { filteredRows, loading, refresh, searchInput, setSearchInput } = useCompetitorSearch();
+  const { filteredRows, loading, refresh, searchInput, setSearchInput, cachedVersion, serverVersion } = useCompetitorSearch();
   const [isImporting, setIsImporting] = useState(false);
   const [lastImportedAt, setLastImportedAt] = useState<string | null>(null);
   const [messageApi, messageContextHolder] = message.useMessage();
@@ -89,6 +89,8 @@ export default function CompetitorsPage() {
             </Button>
             <Button onClick={refresh}>{t("competitors.refresh")}</Button>
             <Statistic title={t("competitors.total")} value={filteredRows.length} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
+            <Statistic title="IndexedDB" value={cachedVersion} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
+            <Statistic title="Server" value={serverVersion ?? "–"} style={{ display: "flex", gap: 8, alignItems: "baseline" }} />
           </Space>
         </Space>
       </Card>

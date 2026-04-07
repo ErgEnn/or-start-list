@@ -17,8 +17,9 @@ use crate::models::{
     DesktopCreateRegistrationResponse, DesktopClearRegistrationRequest, DesktopEventState,
     DesktopUpdateRegistrationPaymentRequest,
     DesktopQueryCompetitorsRequest, DesktopQueryCompetitorsResponse, DesktopSetCompetitionGroupRequest,
-    DesktopSyncStatus, EventRow, EventVersionRow, OutboxItem, OutboxRow, PaymentGroupMemberPayload,
-    PaymentGroupMemberRow, PaymentGroupPayload, PaymentGroupRow, RecentRegistrationRow,
+    DesktopSyncStatus, EventRow, EventVersionRow, MapPreferencePayload, MapPreferenceRow,
+    OutboxItem, OutboxRow, PaymentGroupMemberPayload,
+    AllRegistrationRow, PaymentGroupMemberRow, PaymentGroupPayload, PaymentGroupRow, RecentRegistrationRow,
     RegistrationClearedPayload, RegistrationPayload, ReservedCodeClaimedPayload, ReservedCodePayload,
     ReservedCodeRow, SelectedRegistrationInfo, SelectedRegistrationRow, SyncMetaRow,
     TableColumnRow, API_KEY_KEY, DEVICE_ID_KEY, PORTAL_BASE_URL_KEY, SELECTED_EVENT_KEY,
@@ -60,7 +61,11 @@ pub fn db_path(state: &State<AppState>) -> Result<PathBuf, String> {
 
 pub fn conn(state: &State<AppState>) -> Result<SqliteConnection, String> {
     let db_file = db_path(state)?;
-    SqliteConnection::establish(db_file.to_string_lossy().as_ref()).map_err(|error| error.to_string())
+    let mut connection = SqliteConnection::establish(db_file.to_string_lossy().as_ref())
+        .map_err(|error| error.to_string())?;
+    sql_query("PRAGMA journal_mode=WAL").execute(&mut connection).map_err(|e| e.to_string())?;
+    sql_query("PRAGMA busy_timeout=5000").execute(&mut connection).map_err(|e| e.to_string())?;
+    Ok(connection)
 }
 
 pub fn conn_from_app(app: &AppHandle) -> Result<SqliteConnection, String> {
@@ -95,8 +100,12 @@ fn ensure_column(
 pub fn init_schema(db: &mut SqliteConnection) -> Result<(), String> {
     db.batch_execute(SCHEMA).map_err(|error| error.to_string())?;
     ensure_column(db, "payment_groups", "color_hex", "color_hex TEXT")?;
-    ensure_column(db, "payment_groups", "global_price_override_cents", "global_price_override_cents INTEGER")?;
+    ensure_column(db, "payment_groups", "global_price_override", "global_price_override INTEGER")?;
+    let _ = sql_query("ALTER TABLE payment_groups RENAME COLUMN global_price_override_cents TO global_price_override").execute(db);
+    ensure_column(db, "payment_groups", "sort_order", "sort_order INTEGER NOT NULL DEFAULT 0")?;
     ensure_column(db, "payment_group_members", "price_override_cents", "price_override_cents INTEGER")?;
+    ensure_column(db, "payment_group_members", "compensated_events", "compensated_events INTEGER")?;
+    ensure_column(db, "payment_group_members", "events_attended", "events_attended INTEGER NOT NULL DEFAULT 0")?;
     ensure_column(db, "source_competitors", "gender", "gender TEXT")?;
     ensure_column(
         db,
@@ -221,14 +230,14 @@ pub fn load_events(db: &mut SqliteConnection) -> Result<Vec<EventRow>, String> {
 
 pub fn load_payment_groups(db: &mut SqliteConnection) -> Result<Vec<PaymentGroupPayload>, String> {
     let groups = sql_query(
-        "SELECT payment_group_id, name, color_hex, global_price_override_cents \
+        "SELECT payment_group_id, name, color_hex, global_price_override, sort_order \
          FROM payment_groups \
-         ORDER BY name, payment_group_id",
+         ORDER BY sort_order DESC, name ASC, payment_group_id ASC",
     )
     .load::<PaymentGroupRow>(db)
     .map_err(|error| error.to_string())?;
     let members = sql_query(
-        "SELECT payment_group_id, competitor_id, price_override_cents \
+        "SELECT payment_group_id, competitor_id, price_override_cents, compensated_events, events_attended \
          FROM payment_group_members \
          ORDER BY payment_group_id, competitor_id",
     )
@@ -248,6 +257,8 @@ pub fn load_payment_groups(db: &mut SqliteConnection) -> Result<Vec<PaymentGroup
             .push(PaymentGroupMemberPayload {
                 competitor_id: member.competitor_id,
                 price_override_cents: member.price_override_cents,
+                compensated_events: member.compensated_events,
+                events_attended: Some(member.events_attended),
             });
     }
 
@@ -257,11 +268,29 @@ pub fn load_payment_groups(db: &mut SqliteConnection) -> Result<Vec<PaymentGroup
             payment_group_id: group.payment_group_id.clone(),
             name: group.name,
             color_hex: group.color_hex,
-            global_price_override_cents: group.global_price_override_cents,
+            global_price_override: group.global_price_override,
+            sort_order: group.sort_order,
             competitor_ids: competitor_ids_by_group
                 .remove(&group.payment_group_id)
                 .unwrap_or_default(),
             competitors: members_by_group.remove(&group.payment_group_id).unwrap_or_default(),
+        })
+        .collect())
+}
+
+pub fn load_map_preferences(db: &mut SqliteConnection) -> Result<Vec<MapPreferencePayload>, String> {
+    let rows = sql_query(
+        "SELECT competitor_id, course_name, waterproof_map FROM map_preferences",
+    )
+    .load::<MapPreferenceRow>(db)
+    .map_err(|error| error.to_string())?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| MapPreferencePayload {
+            competitor_id: row.competitor_id,
+            course_name: row.course_name,
+            waterproof_map: row.waterproof_map != 0,
         })
         .collect())
 }
@@ -483,6 +512,36 @@ pub fn load_recent_registrations(
     .map_err(|error| error.to_string())
 }
 
+pub fn load_all_registrations(
+    db: &mut SqliteConnection,
+    event_id: &str,
+) -> Result<Vec<AllRegistrationRow>, String> {
+    if event_id.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    sql_query(
+        "SELECT \
+           r.registration_id, \
+           r.competitor_id, \
+           COALESCE(c.eol_number, '') AS eol_number, \
+           COALESCE(c.first_name, '') AS first_name, \
+           COALESCE(c.last_name, '') AS last_name, \
+           r.course_id, \
+           COALESCE(co.name, r.course_id) AS course_name, \
+           r.paid_price_cents, \
+           r.created_at_device \
+         FROM registrations r \
+         LEFT JOIN source_competitors c ON c.competitor_id = r.competitor_id \
+         LEFT JOIN courses co ON co.event_id = r.event_id AND co.course_id = r.course_id \
+         WHERE r.event_id = ? \
+         ORDER BY r.local_seq DESC, r.created_at_device DESC",
+    )
+    .bind::<Text, _>(event_id)
+    .load::<AllRegistrationRow>(db)
+    .map_err(|error| error.to_string())
+}
+
 pub fn load_event_state(db: &mut SqliteConnection, selected_event_id: &str) -> Result<DesktopEventState, String> {
     Ok(DesktopEventState {
         selected_event_id: selected_event_id.to_string(),
@@ -610,6 +669,13 @@ fn sort_competition_groups(groups: &mut [CompetitionGroupPayload]) {
     });
 }
 
+fn is_within_compensated_limit(member: &PaymentGroupMemberPayload) -> bool {
+    match member.compensated_events {
+        Some(limit) => member.events_attended.unwrap_or(0) < limit,
+        None => true,
+    }
+}
+
 fn find_effective_price(
     competitor_id: &str,
     selected_group_name: &str,
@@ -621,23 +687,22 @@ fn find_effective_price(
         .find(|group| group.name == selected_group_name)
         .map(|group| group.price_cents)?;
 
+    let mut candidates: Vec<i64> = vec![base_price];
+
     for group in payment_groups {
-        if let Some(member) = group
-            .competitors
-            .iter()
-            .find(|member| member.competitor_id == competitor_id && member.price_override_cents.is_some())
-        {
-            return member.price_override_cents;
+        if let Some(member) = group.competitors.iter().find(|m| m.competitor_id == competitor_id) {
+            if !is_within_compensated_limit(member) {
+                continue;
+            }
+            if let Some(price) = member.price_override_cents {
+                candidates.push(price);
+            } else if let Some(global) = group.global_price_override {
+                candidates.push(global * 100);
+            }
         }
     }
 
-    for group in payment_groups {
-        if group.competitor_ids.iter().any(|id| id == competitor_id) && group.global_price_override_cents.is_some() {
-            return group.global_price_override_cents;
-        }
-    }
-
-    Some(base_price)
+    candidates.into_iter().min()
 }
 
 fn derive_selected_competition_group(
@@ -1492,6 +1557,16 @@ pub fn update_sync_error(
     load_sync_status_from_db(db)
 }
 
+pub fn reset_competitor_sync_state(db: &mut SqliteConnection) -> Result<(), String> {
+    sql_query("DELETE FROM source_competitors")
+        .execute(db)
+        .map_err(|error| error.to_string())?;
+    sql_query("UPDATE sync_meta SET last_competitor_version = 0 WHERE singleton = 1")
+        .execute(db)
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 pub fn device_config_for_sync(
     db: &mut SqliteConnection,
 ) -> Result<(String, String), String> {
@@ -1569,7 +1644,7 @@ mod tests {
         sql_query("INSERT INTO competition_groups(name, gender, min_year, max_year, price_cents) VALUES ('N21', 'female', 2000, 2005, 1200)")
             .execute(&mut db)
             .expect("insert comp group");
-        sql_query("INSERT INTO payment_groups(payment_group_id, name, global_price_override_cents) VALUES ('pg-1', 'Group', 900)")
+        sql_query("INSERT INTO payment_groups(payment_group_id, name, global_price_override) VALUES ('pg-1', 'Group', 9)")
             .execute(&mut db)
             .expect("insert payment group");
         sql_query("INSERT INTO payment_group_members(payment_group_id, competitor_id, price_override_cents) VALUES ('pg-1', 'comp-1', 700)")

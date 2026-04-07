@@ -245,7 +245,8 @@ export const paymentGroups = pgTable(
     paymentGroupId: text("payment_group_id").primaryKey(),
     name: text("name").notNull(),
     colorHex: text("color_hex"),
-    globalPriceOverrideCents: numeric("global_price_override_cents", { precision: 10, scale: 2 }),
+    globalPriceOverride: numeric("global_price_override", { precision: 10, scale: 2 }),
+    sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -260,11 +261,23 @@ export const paymentGroupCompetitors = pgTable(
       .references(() => paymentGroups.paymentGroupId, { onDelete: "cascade" }),
     competitorId: text("competitor_id").notNull(),
     priceOverrideCents: numeric("price_override_cents", { precision: 10, scale: 2 }),
+    compensatedEvents: integer("compensated_events"),
   },
   (table) => [
     primaryKey({ columns: [table.paymentGroupId, table.competitorId] }),
     index("payment_group_competitors_competitor_idx").on(table.competitorId),
   ],
+);
+
+export const mapPreferences = pgTable(
+  "map_preferences",
+  {
+    competitorId: text("competitor_id").primaryKey(),
+    courseName: text("course_name").notNull(),
+    waterproofMap: boolean("waterproof_map").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
 );
 
 export const competitionGroups = pgTable(

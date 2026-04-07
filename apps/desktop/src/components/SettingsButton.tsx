@@ -29,7 +29,7 @@ import {
   type DeviceConfig,
 } from "../lib/device-config";
 import UsbIcon from "@mui/icons-material/Usb";
-import { desktopForceSync, siConnect } from "../lib/desktop";
+import { desktopForceSync, desktopRefreshCompetitors, siConnect } from "../lib/desktop";
 import { useSiReaderStore } from "../stores/siReaderStore";
 import { t } from "../i18n";
 
@@ -51,6 +51,8 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
   const [syncMessage, setSyncMessage] = useState("");
   const [portalBaseUrlLocked, setPortalBaseUrlLocked] = useState(false);
   const [apiKeyLocked, setApiKeyLocked] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState("");
   const [siConnecting, setSiConnecting] = useState(false);
   const [siMessage, setSiMessage] = useState("");
   const siConnected = useSiReaderStore((s) => s.connected);
@@ -125,6 +127,19 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
       setSyncMessage(t("force_sync_failed"));
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function handleRefreshCompetitors() {
+    setRefreshing(true);
+    setRefreshMessage("");
+    try {
+      await desktopRefreshCompetitors();
+      setRefreshMessage(t("refresh_competitors_success"));
+    } catch {
+      setRefreshMessage(t("refresh_competitors_failed"));
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -238,6 +253,21 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
                         {syncMessage ? (
                           <Typography variant="body2" sx={{ color: syncMessage === t("force_sync_success") ? "success.main" : "error.main" }}>
                             {syncMessage}
+                          </Typography>
+                        ) : null}
+                      </Box>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                        <Button
+                          variant="outlined"
+                          startIcon={refreshing ? <CircularProgress size={16} /> : <SyncIcon />}
+                          onClick={() => void handleRefreshCompetitors()}
+                          disabled={refreshing}
+                        >
+                          {t("refresh_competitors")}
+                        </Button>
+                        {refreshMessage ? (
+                          <Typography variant="body2" sx={{ color: refreshMessage === t("refresh_competitors_success") ? "success.main" : "error.main" }}>
+                            {refreshMessage}
                           </Typography>
                         ) : null}
                       </Box>

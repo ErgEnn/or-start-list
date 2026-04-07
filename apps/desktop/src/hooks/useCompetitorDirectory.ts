@@ -5,6 +5,7 @@ import type {
   DesktopRecentRegistration,
   DesktopSyncStatus,
   Event,
+  MapPreferenceMember,
   PaymentGroup,
   PaymentMethod,
   SelectedRegistrationInfo,
@@ -29,6 +30,7 @@ type UseCompetitorDirectoryResult = {
   groupedCount: number;
   indexedCount: number;
   paymentGroups: PaymentGroup[];
+  mapPreferences: MapPreferenceMember[];
   competitionGroups: CompetitionGroup[];
   selectedFilter: string;
   setSelectedFilter: (filterId: string) => void;
@@ -64,6 +66,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
   const [groupedCount, setGroupedCount] = useState(0);
   const [indexedCount, setIndexedCount] = useState(0);
   const [paymentGroups, setPaymentGroups] = useState<PaymentGroup[]>([]);
+  const [mapPreferences, setMapPreferences] = useState<MapPreferenceMember[]>([]);
   const [competitionGroups, setCompetitionGroups] = useState<CompetitionGroup[]>([]);
   const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER_ID);
   const [searchInput, setSearchInput] = useState("");
@@ -325,6 +328,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
 
         setEvents(bootstrap.events);
         setPaymentGroups(bootstrap.paymentGroups);
+        setMapPreferences(bootstrap.mapPreferences);
         setCompetitionGroups(bootstrap.competitionGroups);
         setSyncStatus(bootstrap.syncStatus);
         applyEventState(bootstrap.eventState);
@@ -365,6 +369,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
 
         setEvents(bootstrap.events);
         setPaymentGroups(bootstrap.paymentGroups);
+        setMapPreferences(bootstrap.mapPreferences);
         setCompetitionGroups(bootstrap.competitionGroups);
         applyEventState(bootstrap.eventState);
         await refreshQuery(latestFilterRef.current, latestSearchQueryRef.current);
@@ -372,7 +377,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
       })
       .catch((cause) => {
         if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : t('failed_refresh_local_data_after_sync'));
+          setError(typeof cause === 'string' ? cause : cause instanceof Error ? cause.message : t('failed_refresh_local_data_after_sync'));
         }
       });
 
@@ -448,6 +453,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     groupedCount,
     indexedCount,
     paymentGroups,
+    mapPreferences,
     competitionGroups,
     selectedFilter,
     setSelectedFilter,

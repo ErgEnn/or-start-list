@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -16,7 +17,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
-import type { CompetitionGroup, Course, DesktopCompetitorRow, PaymentMethod, SelectedRegistrationInfo } from '@or/shared';
+import type { CompetitionGroup, Course, DesktopCompetitorRow, MapPreferenceMember, PaymentMethod, SelectedRegistrationInfo } from '@or/shared';
 import { t } from '../i18n';
 
 type CompetitorDetailDialogProps = {
@@ -24,6 +25,7 @@ type CompetitorDetailDialogProps = {
   allCompetitionGroups: CompetitionGroup[];
   courses: Course[];
   courseNameById: Map<string, string>;
+  mapPreference: MapPreferenceMember | null;
   textScale: number;
   selectedCourseId: string | null;
   selectedRegistration: SelectedRegistrationInfo | null;
@@ -63,6 +65,7 @@ export function CompetitorDetailDialog({
   allCompetitionGroups,
   courses,
   courseNameById,
+  mapPreference,
   textScale,
   selectedCourseId,
   selectedRegistration,
@@ -78,7 +81,16 @@ export function CompetitorDetailDialog({
   const [localGender, setLocalGender] = useState<string>(competitor.gender ?? '');
   const [localDob, setLocalDob] = useState<string>(competitor.dob ?? '');
   const [localCompetitionGroup, setLocalCompetitionGroup] = useState(competitor.selectedCompetitionGroupName);
-  const [localCourseId, setLocalCourseId] = useState(selectedCourseId);
+
+  const mapPreferredCourseId = useMemo(() => {
+    if (!mapPreference) return null;
+    const match = courses.find((c) => c.name.toLowerCase() === mapPreference.courseName.toLowerCase());
+    return match?.courseId ?? null;
+  }, [mapPreference, courses]);
+
+  const [localCourseId, setLocalCourseId] = useState(
+    selectedCourseId ?? mapPreferredCourseId,
+  );
   const initialPaymentMethod = selectedRegistration?.paymentMethod ?? 'cash';
   const initialPaidPriceCents = selectedRegistration?.paidPriceCents ?? (competitor.priceCents ?? 0);
   const initialIsCustomPrice = selectedRegistration != null && selectedRegistration.paidPriceCents !== (competitor.priceCents ?? 0);
@@ -168,8 +180,16 @@ export function CompetitorDetailDialog({
             <DetailRow label={t('eol_code')} value={competitor.eolNumber} fontSize={scaledFontSize} />
             <DetailRow label={t('si_code')} value={competitor.siCard ?? '—'} fontSize={scaledFontSize} />
 
-            <Box sx={{ gridColumn: '1 / -1' }}>
-              <DetailRow label={t('club')} value={competitor.club ?? '—'} fontSize={scaledFontSize} />
+            <DetailRow label={t('club')} value={competitor.club ?? '—'} fontSize={scaledFontSize} />
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ fontSize: `calc(${scaledFontSize} * 0.75)` }}>
+                {t('other')}
+              </Typography>
+              {mapPreference?.waterproofMap ? (
+                <Box sx={{ mt: 0.5 }}><Chip label={t('waterproof_map')} color="info" size="small" /></Box>
+              ) : (
+                <Typography variant="body1" sx={{ fontSize: scaledFontSize }}>—</Typography>
+              )}
             </Box>
           </Box>
 
@@ -209,7 +229,7 @@ export function CompetitorDetailDialog({
             <ToggleButtonGroup
               exclusive
               value={localCourseId}
-              disabled={courses.length === 0 || submitting || localCompetitionGroup === null}
+              disabled={courses.length === 0 || submitting || localCompetitionGroup === null || mapPreferredCourseId !== null}
               sx={{ flexWrap: 'wrap', width: '100%' }}
               onChange={(_, nextValue: string | null) => {
                 setLocalCourseId(nextValue);

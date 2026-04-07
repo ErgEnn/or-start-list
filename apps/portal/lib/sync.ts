@@ -108,6 +108,11 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
         )
         .digest("hex");
 
+      const maxVersionResult = await client
+        .select({ maxVersion: sql<number>`coalesce(max(${sourceCompetitors.version}), 0)` })
+        .from(sourceCompetitors);
+      const nextVersion = (maxVersionResult[0]?.maxVersion ?? 0) + 1;
+
       await client
         .insert(sourceCompetitors)
         .values({
@@ -120,7 +125,7 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
           club: payload.club ?? null,
           siCard: payload.siCard ?? null,
           payloadHash,
-          version: 1,
+          version: nextVersion,
           createdAt: now,
           updatedAt: now,
         })
@@ -135,7 +140,7 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
             club: sql`excluded.club`,
             siCard: sql`excluded.si_card`,
             payloadHash: sql`excluded.payload_hash`,
-            version: sql`${sourceCompetitors.version} + 1`,
+            version: nextVersion,
             updatedAt: now,
           },
         });

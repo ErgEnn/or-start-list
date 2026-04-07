@@ -51,6 +51,7 @@ export function App() {
     setSelectedEventId,
     courses,
     competitionGroups,
+    mapPreferences,
     selectedCoursesByCompetitor,
     selectedRegistrationsByCompetitor,
     submittingCompetitorIds,
@@ -60,6 +61,7 @@ export function App() {
   } = useCompetitorDirectory(deviceConfigRevision);
   const [selectedJumpLetter, setSelectedJumpLetter] = useState<string | null>(null);
   const [focusedCompetitor, setFocusedCompetitor] = useState<{ competitorId: string; token: number } | null>(null);
+  const [openCompetitorId, setOpenCompetitorId] = useState<{ competitorId: string; token: number } | null>(null);
   const selectedEvent = useMemo(
     () => events.find((event) => event.eventId === selectedEventId) ?? null,
     [events, selectedEventId],
@@ -164,6 +166,14 @@ export function App() {
     });
   }
 
+  function handleOpenCompetitorFromRegistrations(competitorId: string) {
+    setSelectedFilter(ALL_FILTER_ID);
+    setSelectedJumpLetter(null);
+    const token = Date.now();
+    setFocusedCompetitor({ competitorId, token });
+    setOpenCompetitorId({ competitorId, token });
+  }
+
   function handleSettingsSaved(config: DeviceConfig) {
     setSavedTextScale(config.textScale);
     setTextScale(config.textScale);
@@ -184,10 +194,14 @@ export function App() {
 
 
 
-  function handleSelectEvent(eventId: string) {
+  const handleCloseEventDialog = useCallback(() => {
+    setEventDialogOpen(false);
+  }, []);
+
+  const handleSelectEvent = useCallback((eventId: string) => {
     setSelectedEventId(eventId);
     setEventDialogOpen(false);
-  }
+  }, [setSelectedEventId]);
 
   const availableLetters = useMemo(() => new Set(jumpTargets.keys()), [jumpTargets]);
 
@@ -214,7 +228,7 @@ export function App() {
         selectedEventId={selectedEventId}
         loading={loading}
         requireSelection={!selectedEventId}
-        onClose={() => setEventDialogOpen(false)}
+        onClose={handleCloseEventDialog}
         onSelectEvent={handleSelectEvent}
       />
       <Row>
@@ -226,6 +240,7 @@ export function App() {
         <AddCompetitorButton
           courses={courses}
           competitionGroups={competitionGroups}
+          mapPreferences={mapPreferences}
           selectedEventId={selectedEventId}
           onClaimed={handleCompetitorClaimed}
         />
@@ -251,6 +266,7 @@ export function App() {
           <MainList
             rows={rows}
             paymentGroups={paymentGroups}
+            mapPreferences={mapPreferences}
             competitionGroups={competitionGroups}
             selectedFilter={selectedFilter}
             showDobColumn={showSearchDobColumn}
@@ -266,13 +282,16 @@ export function App() {
             onSelectCompetitionGroup={selectCompetitionGroupForCompetitor}
             onSelectCourse={selectCourseForCompetitor}
             onUpdateRegistrationPayment={updateRegistrationPayment}
+            openCompetitorId={openCompetitorId}
           />
         </Box>
       </Box>
       <RecentsList
         registrations={recentRegistrations}
         loading={eventLoading}
+        eventId={selectedEventId}
         onSelectRegistration={handleRecentRegistrationClick}
+        onOpenCompetitor={handleOpenCompetitorFromRegistrations}
       />
       <StatusBar
         loading={loading || eventLoading}

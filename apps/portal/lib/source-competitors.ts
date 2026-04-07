@@ -364,6 +364,13 @@ export async function upsertSourceCompetitorImport(
     latestByEol.set(row.eolNumber, row);
   }
 
+  // Compute a single next version for the entire import batch so all
+  // new/changed rows share the same version number.
+  const maxVersionResult = await tx
+    .select({ maxVersion: sql<number>`coalesce(max(${sourceCompetitors.version}), 0)` })
+    .from(sourceCompetitors);
+  const nextVersion = (maxVersionResult[0]?.maxVersion ?? 0) + 1;
+
   const upserts = [...latestByEol.values()].map((row) => ({
     competitorId: row.competitorId,
     eolNumber: row.eolNumber,
@@ -374,7 +381,7 @@ export async function upsertSourceCompetitorImport(
     club: row.club ?? null,
     siCard: row.siCard ?? null,
     payloadHash: hashCompetitor(row),
-    version: 1,
+    version: nextVersion,
     createdAt: now,
     updatedAt: now,
   }));
@@ -396,7 +403,7 @@ export async function upsertSourceCompetitorImport(
             club: sql`excluded.club`,
             siCard: sql`excluded.si_card`,
             payloadHash: sql`excluded.payload_hash`,
-            version: sql`${sourceCompetitors.version} + 1`,
+            version: nextVersion,
             updatedAt: now,
           },
           setWhere: sql`${sourceCompetitors.payloadHash} <> excluded.payload_hash`,

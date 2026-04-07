@@ -210,11 +210,13 @@ async function createSchema(): Promise<void> {
       payment_group_id text PRIMARY KEY,
       name text NOT NULL,
       color_hex text,
-      global_price_override_cents numeric(10, 2),
+      global_price_override numeric(10, 2),
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
+  await pool.query(`ALTER TABLE payment_groups ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE payment_groups RENAME COLUMN global_price_override_cents TO global_price_override`).catch(() => {});
   await pool.query(`CREATE INDEX IF NOT EXISTS payment_groups_name_idx ON payment_groups(name)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS payment_group_competitors (
@@ -225,6 +227,7 @@ async function createSchema(): Promise<void> {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS payment_group_competitors_competitor_idx ON payment_group_competitors(competitor_id)`);
+  await pool.query(`ALTER TABLE payment_group_competitors ADD COLUMN IF NOT EXISTS compensated_events integer`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS competition_groups (
       name text PRIMARY KEY,
@@ -237,6 +240,15 @@ async function createSchema(): Promise<void> {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS competition_groups_name_idx ON competition_groups(name)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS map_preferences (
+      competitor_id text PRIMARY KEY,
+      course_name text NOT NULL,
+      waterproof_map boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
 }
 
 export async function withTransaction<T>(handler: (tx: DbLike) => Promise<T>): Promise<T> {

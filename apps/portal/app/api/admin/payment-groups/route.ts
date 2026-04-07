@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, countDistinct, eq, sql } from "drizzle-orm";
+import { asc, countDistinct, desc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { withTransaction } from "@/lib/db";
 import { paymentGroupCompetitors, paymentGroups, registrations, sourceCompetitors } from "@/lib/db/schema";
@@ -9,12 +9,14 @@ import { requireAdminSession } from "@/lib/session";
 type PaymentGroupCompetitorInput = {
   competitorId?: unknown;
   priceOverrideCents?: unknown;
+  compensatedEvents?: unknown;
 };
 
 type CreatePaymentGroupBody = {
   name?: unknown;
   colorHex?: unknown;
-  globalPriceOverrideCents?: unknown;
+  globalPriceOverride?: unknown;
+  sortOrder?: unknown;
   competitors?: unknown;
 };
 
@@ -22,7 +24,8 @@ type GroupRow = {
   paymentGroupId: string;
   name: string;
   colorHex: string | null;
-  globalPriceOverrideCents: number | null;
+  globalPriceOverride: number | null;
+  sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -31,6 +34,7 @@ type GroupMemberRow = {
   paymentGroupId: string;
   competitorId: string;
   priceOverrideCents: number | null;
+  compensatedEvents: number | null;
   eolNumber: string | null;
   firstName: string | null;
   lastName: string | null;
@@ -42,12 +46,22 @@ type EventCountRow = {
   eventCount: number;
 };
 
+function parseOptionalNonNegativeInt(value: unknown): number | null | "invalid" {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
+    return value;
+  }
+  return "invalid";
+}
+
 function normalizeCompetitors(value: unknown) {
   if (!Array.isArray(value)) {
     return null;
   }
 
-  const normalized = [] as Array<{ competitorId: string; priceOverrideCents: number | null }>;
+  const normalized = [] as Array<{ competitorId: string; priceOverrideCents: number | null; compensatedEvents: number | null }>;
   const seen = new Set<string>();
 
   for (const item of value as PaymentGroupCompetitorInput[]) {
@@ -61,12 +75,17 @@ function normalizeCompetitors(value: unknown) {
       return null;
     }
 
+    const compensatedEvents = parseOptionalNonNegativeInt(item.compensatedEvents);
+    if (compensatedEvents === "invalid") {
+      return null;
+    }
+
     if (seen.has(competitorId)) {
       return null;
     }
     seen.add(competitorId);
 
-    normalized.push({ competitorId, priceOverrideCents });
+    normalized.push({ competitorId, priceOverrideCents, compensatedEvents });
   }
 
   return normalized;
@@ -101,18 +120,20 @@ export async function GET() {
         paymentGroupId: paymentGroups.paymentGroupId,
         name: paymentGroups.name,
         colorHex: paymentGroups.colorHex,
-        globalPriceOverrideCents: paymentGroups.globalPriceOverrideCents,
+        globalPriceOverride: paymentGroups.globalPriceOverride,
+        sortOrder: paymentGroups.sortOrder,
         createdAt: paymentGroups.createdAt,
         updatedAt: paymentGroups.updatedAt,
       })
       .from(paymentGroups)
-      .orderBy(asc(paymentGroups.name), asc(paymentGroups.paymentGroupId))) as GroupRow[];
+      .orderBy(desc(paymentGroups.sortOrder), asc(paymentGroups.name), asc(paymentGroups.paymentGroupId))) as GroupRow[];
 
     const competitors = (await tx
       .select({
         paymentGroupId: paymentGroupCompetitors.paymentGroupId,
         competitorId: paymentGroupCompetitors.competitorId,
         priceOverrideCents: paymentGroupCompetitors.priceOverrideCents,
+        compensatedEvents: paymentGroupCompetitors.compensatedEvents,
         eolNumber: sourceCompetitors.eolNumber,
         firstName: sourceCompetitors.firstName,
         lastName: sourceCompetitors.lastName,
@@ -157,6 +178,7 @@ export async function GET() {
       const members = (competitorsByGroup.get(group.paymentGroupId) ?? []).map((member) => ({
         competitorId: member.competitorId,
         priceOverrideCents: member.priceOverrideCents,
+        compensatedEvents: member.compensatedEvents,
         eolNumber: member.eolNumber,
         firstName: member.firstName,
         lastName: member.lastName,
@@ -167,13 +189,15 @@ export async function GET() {
         paymentGroupId: group.paymentGroupId,
         name: group.name,
         colorHex: group.colorHex,
-        globalPriceOverrideCents: moneyFromDb(group.globalPriceOverrideCents),
+        globalPriceOverride: moneyFromDb(group.globalPriceOverride),
+        sortOrder: group.sortOrder,
         createdAt: group.createdAt,
         updatedAt: group.updatedAt,
         competitorsCount: members.length,
         competitors: members.map((member) => ({
           ...member,
           priceOverrideCents: moneyFromDb(member.priceOverrideCents),
+          compensatedEvents: member.compensatedEvents,
           eventsAttended: eventCountMap.get(member.competitorId) ?? 0,
         })),
       };
@@ -193,10 +217,11 @@ export async function POST(request: NextRequest) {
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const colorHex = normalizeColorHex(body.colorHex);
-  const globalPriceOverrideCents = parseOptionalMoney(body.globalPriceOverrideCents);
+  const globalPriceOverride = parseOptionalMoney(body.globalPriceOverride);
+  const sortOrder = typeof body.sortOrder === "number" && Number.isInteger(body.sortOrder) ? body.sortOrder : 0;
   const competitors = normalizeCompetitors(body.competitors);
 
-  if (!name || colorHex === "invalid" || globalPriceOverrideCents === "invalid" || competitors === null) {
+  if (!name || colorHex === "invalid" || globalPriceOverride === "invalid" || competitors === null) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
@@ -207,7 +232,8 @@ export async function POST(request: NextRequest) {
       paymentGroupId,
       name,
       colorHex,
-      globalPriceOverrideCents: globalPriceOverrideCents === null ? null : toMoneyDb(globalPriceOverrideCents),
+      globalPriceOverride: globalPriceOverride === null ? null : toMoneyDb(globalPriceOverride),
+      sortOrder,
     });
 
     for (const member of competitors) {
@@ -215,6 +241,7 @@ export async function POST(request: NextRequest) {
         paymentGroupId,
         competitorId: member.competitorId,
         priceOverrideCents: member.priceOverrideCents === null ? null : toMoneyDb(member.priceOverrideCents),
+        compensatedEvents: member.compensatedEvents,
       });
     }
   });

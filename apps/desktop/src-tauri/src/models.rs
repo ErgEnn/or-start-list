@@ -1,5 +1,5 @@
 use diesel::{
-    sql_types::{BigInt, Nullable, Text},
+    sql_types::{BigInt, Integer, Nullable, Text},
     QueryableByName,
 };
 use serde::{Deserialize, Serialize};
@@ -88,6 +88,10 @@ pub struct EventRow {
 pub struct PaymentGroupMemberPayload {
     pub competitor_id: String,
     pub price_override_cents: Option<i64>,
+    #[serde(default)]
+    pub compensated_events: Option<i64>,
+    #[serde(default)]
+    pub events_attended: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -96,7 +100,9 @@ pub struct PaymentGroupPayload {
     pub payment_group_id: String,
     pub name: String,
     pub color_hex: Option<String>,
-    pub global_price_override_cents: Option<i64>,
+    pub global_price_override: Option<i64>,
+    #[serde(default)]
+    pub sort_order: i32,
     pub competitor_ids: Vec<String>,
     pub competitors: Vec<PaymentGroupMemberPayload>,
 }
@@ -111,7 +117,9 @@ pub struct PaymentGroupRow {
     #[diesel(sql_type = Nullable<Text>)]
     pub color_hex: Option<String>,
     #[diesel(sql_type = Nullable<BigInt>)]
-    pub global_price_override_cents: Option<i64>,
+    pub global_price_override: Option<i64>,
+    #[diesel(sql_type = Integer)]
+    pub sort_order: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, QueryableByName)]
@@ -123,6 +131,28 @@ pub struct PaymentGroupMemberRow {
     pub competitor_id: String,
     #[diesel(sql_type = Nullable<BigInt>)]
     pub price_override_cents: Option<i64>,
+    #[diesel(sql_type = Nullable<BigInt>)]
+    pub compensated_events: Option<i64>,
+    #[diesel(sql_type = BigInt)]
+    pub events_attended: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MapPreferencePayload {
+    pub competitor_id: String,
+    pub course_name: String,
+    pub waterproof_map: bool,
+}
+
+#[derive(Debug, Clone, QueryableByName)]
+pub struct MapPreferenceRow {
+    #[diesel(sql_type = Text)]
+    pub competitor_id: String,
+    #[diesel(sql_type = Text)]
+    pub course_name: String,
+    #[diesel(sql_type = Integer)]
+    pub waterproof_map: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +201,29 @@ pub struct RecentRegistrationRow {
     pub paid_price_cents: i64,
     #[diesel(sql_type = Text)]
     pub payment_method: String,
+    #[diesel(sql_type = Text)]
+    pub created_at_device: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, QueryableByName)]
+#[serde(rename_all = "camelCase")]
+pub struct AllRegistrationRow {
+    #[diesel(sql_type = Text)]
+    pub registration_id: String,
+    #[diesel(sql_type = Text)]
+    pub competitor_id: String,
+    #[diesel(sql_type = Text)]
+    pub eol_number: String,
+    #[diesel(sql_type = Text)]
+    pub first_name: String,
+    #[diesel(sql_type = Text)]
+    pub last_name: String,
+    #[diesel(sql_type = Text)]
+    pub course_id: String,
+    #[diesel(sql_type = Text)]
+    pub course_name: String,
+    #[diesel(sql_type = BigInt)]
+    pub paid_price_cents: i64,
     #[diesel(sql_type = Text)]
     pub created_at_device: String,
 }
@@ -238,6 +291,7 @@ pub struct DesktopQueryCompetitorsResponse {
 pub struct DesktopBootstrapResponse {
     pub events: Vec<EventRow>,
     pub payment_groups: Vec<PaymentGroupPayload>,
+    pub map_preferences: Vec<MapPreferencePayload>,
     pub competition_groups: Vec<CompetitionGroupPayload>,
     pub sync_status: DesktopSyncStatus,
     pub event_state: DesktopEventState,
@@ -404,6 +458,7 @@ pub struct DeviceSyncCycleResponse {
     pub rejected: Vec<RejectedItem>,
     pub events: Vec<EventRow>,
     pub payment_groups: Vec<PaymentGroupPayload>,
+    pub map_preferences: Vec<MapPreferencePayload>,
     pub competition_groups: Vec<CompetitionGroupPayload>,
     pub competitor_delta: CompetitorDeltaResponse,
     pub event_snapshots: Vec<PullPayload>,
