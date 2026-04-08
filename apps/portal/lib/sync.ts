@@ -88,6 +88,8 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
             dob: payload.dob ?? null,
             club: payload.club ?? null,
             siCard: payload.siCard ?? null,
+            county: payload.county ?? null,
+            email: payload.email ?? null,
             updatedAt: now,
           })
           .where(eq(reservedCodes.code, payload.code));

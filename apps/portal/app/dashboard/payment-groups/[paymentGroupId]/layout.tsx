@@ -5,7 +5,7 @@ import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useT } from "@/lib/i18n-client";
 
 export default function PaymentGroupDetailLayout({ children }: { children: ReactNode }) {
@@ -15,6 +15,20 @@ export default function PaymentGroupDetailLayout({ children }: { children: React
   const params = useParams<{ paymentGroupId: string }>();
   const paymentGroupId = params.paymentGroupId;
   const base = `/dashboard/payment-groups/${encodeURIComponent(paymentGroupId)}`;
+  const [groupName, setGroupName] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      const response = await fetch(`/api/admin/payment-groups/${encodeURIComponent(paymentGroupId)}`, {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const payload = (await response.json()) as { paymentGroup: { name: string } };
+        setGroupName(payload.paymentGroup.name);
+      }
+    }
+    load();
+  }, [paymentGroupId]);
 
   const activeKey = pathname.endsWith("/competitors") ? "competitors" : "settings";
 
@@ -28,7 +42,7 @@ export default function PaymentGroupDetailLayout({ children }: { children: React
           <Title level={3} style={{ margin: 0 }}>
             {t("paymentGroups.modalEditTitle")}
           </Title>
-          <Paragraph style={{ margin: 0, color: "#595959" }}>{decodeURIComponent(paymentGroupId)}</Paragraph>
+          {groupName && <Paragraph style={{ margin: 0, color: "#595959" }}>{groupName}</Paragraph>}
           <Tabs
             activeKey={activeKey}
             items={[

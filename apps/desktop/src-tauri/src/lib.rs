@@ -91,6 +91,7 @@ pub fn run() {
             commands::si_connect,
             commands::si_disconnect,
             commands::si_get_status,
+            commands::open_external_url,
         ])
         .run(tauri::generate_context!())
         .expect("tauri app error");

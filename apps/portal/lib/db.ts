@@ -197,6 +197,8 @@ async function createSchema(): Promise<void> {
   await pool.query(`CREATE INDEX IF NOT EXISTS reserved_codes_is_reserved_idx ON reserved_codes(is_reserved)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS reserved_codes_last_name_idx ON reserved_codes(last_name, first_name)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS reserved_codes_eol_number_idx ON reserved_codes(eol_number)`);
+  await pool.query(`ALTER TABLE reserved_codes ADD COLUMN IF NOT EXISTS county text`);
+  await pool.query(`ALTER TABLE reserved_codes ADD COLUMN IF NOT EXISTS email text`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS rental_sis (
       code text PRIMARY KEY,
@@ -205,6 +207,15 @@ async function createSchema(): Promise<void> {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS rental_sis_code_idx ON rental_sis(code)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS info_pages (
+      id text PRIMARY KEY,
+      title text NOT NULL,
+      content text NOT NULL DEFAULT '',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS payment_groups (
       payment_group_id text PRIMARY KEY,

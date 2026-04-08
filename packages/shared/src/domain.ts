@@ -119,7 +119,16 @@ export const reservedCodeClaimedPayloadSchema = z.object({
   dob: z.string().nullable().optional(),
   club: z.string().nullable().optional(),
   siCard: z.string().nullable().optional(),
+  county: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
   isManualEol: z.boolean().optional(),
+});
+
+export const infoPageSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  content: z.string(),
+  updatedAt: z.string().datetime(),
 });
 
 export const syncStateSchema = z.object({
@@ -146,4 +155,5 @@ export type Registration = z.infer<typeof registrationSchema>;
 export type RegistrationCleared = z.infer<typeof registrationClearedSchema>;
 export type ReservedCode = z.infer<typeof reservedCodeSchema>;
 export type ReservedCodeClaimedPayload = z.infer<typeof reservedCodeClaimedPayloadSchema>;
+export type InfoPage = z.infer<typeof infoPageSchema>;
 export type SyncState = z.infer<typeof syncStateSchema>;

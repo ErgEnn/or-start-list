@@ -219,6 +219,8 @@ export const reservedCodes = pgTable(
     dob: date("dob"),
     club: text("club"),
     siCard: text("si_card"),
+    county: text("county"),
+    email: text("email"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -228,6 +230,14 @@ export const reservedCodes = pgTable(
     index("reserved_codes_eol_number_idx").on(table.eolNumber),
   ],
 );
+
+export const infoPages = pgTable("info_pages", {
+  id: text("id").primaryKey(),
+  title: text("title").notNull(),
+  content: text("content").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const rentalSis = pgTable(
   "rental_sis",

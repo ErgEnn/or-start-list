@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   CircularProgress,
@@ -30,6 +31,24 @@ import type {
 import { desktopGetReservedCodes, desktopClaimReservedCode } from "../lib/desktop";
 import { t } from "../i18n";
 import { type ModalLang, modalT } from "./addCompetitorTranslations";
+
+const ESTONIAN_COUNTIES = [
+  "Harju maakond",
+  "Hiiu maakond",
+  "Ida-Viru maakond",
+  "Jõgeva maakond",
+  "Järva maakond",
+  "Lääne maakond",
+  "Lääne-Viru maakond",
+  "Põlva maakond",
+  "Pärnu maakond",
+  "Rapla maakond",
+  "Saare maakond",
+  "Tartu maakond",
+  "Valga maakond",
+  "Viljandi maakond",
+  "Võru maakond",
+];
 
 type AddCompetitorButtonProps = {
   courses: Course[];
@@ -102,6 +121,8 @@ export function AddCompetitorButton({
   const [dobError, setDobError] = useState("");
   const [club, setClub] = useState("");
   const [siCard, setSiCard] = useState("");
+  const [county, setCounty] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
   const [language, setLanguage] = useState<ModalLang>("et");
   const [courseId, setCourseId] = useState("");
   const [competitionGroupName, setCompetitionGroupName] = useState("");
@@ -176,6 +197,8 @@ export function AddCompetitorButton({
     setDobError("");
     setClub("");
     setSiCard("");
+    setCounty(null);
+    setEmail("");
     setCourseId("");
     setCompetitionGroupName("");
     setError("");
@@ -215,6 +238,8 @@ export function AddCompetitorButton({
         dob,
         club: club.trim() || undefined,
         siCard: siCard.trim() || undefined,
+        county: county || undefined,
+        email: email.trim() || undefined,
         isManualEol: usingManualEol || undefined,
       });
       setOpen(false);
@@ -239,6 +264,7 @@ export function AddCompetitorButton({
     !loading;
 
   const mt = (key: string) => modalT(language, key);
+  const et = (key: string) => modalT("et", key);
 
   return (
     <>
@@ -264,6 +290,12 @@ export function AddCompetitorButton({
             </ToggleButton>
             <ToggleButton value="fi" sx={{ px: 1, py: 0.25, fontSize: "0.75rem" }}>
               FI
+            </ToggleButton>
+            <ToggleButton value="lv" sx={{ px: 1, py: 0.25, fontSize: "0.75rem" }}>
+              LV
+            </ToggleButton>
+            <ToggleButton value="ru" sx={{ px: 1, py: 0.25, fontSize: "0.75rem" }}>
+              RU
             </ToggleButton>
           </ToggleButtonGroup>
         </DialogTitle>
@@ -323,55 +355,71 @@ export function AddCompetitorButton({
                   />
                 </Box>
 
-                <FormControl fullWidth required>
-                  <InputLabel>{mt("gender")}</InputLabel>
-                  <Select
-                    value={gender}
-                    label={mt("gender")}
-                    onChange={(e) => setGender(e.target.value)}
-                  >
-                    <MenuItem value="male">{mt("male")}</MenuItem>
-                    <MenuItem value="female">{mt("female")}</MenuItem>
-                  </Select>
-                </FormControl>
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <TextField
+                    sx={{ flex: 1 }}
+                    required
+                    label={mt("dob")}
+                    value={dob}
+                    onChange={(e) => {
+                      setDob(e.target.value);
+                      if (dobError) setDobError("");
+                    }}
+                    onBlur={handleDobBlur}
+                    placeholder={mt("dob_placeholder")}
+                    error={!!dobError}
+                    helperText={dobError}
+                  />
+                  <FormControl sx={{ flex: 1 }} required>
+                    <InputLabel>{mt("gender")}</InputLabel>
+                    <Select
+                      value={gender}
+                      label={mt("gender")}
+                      onChange={(e) => setGender(e.target.value)}
+                    >
+                      <MenuItem value="male">{mt("male")}</MenuItem>
+                      <MenuItem value="female">{mt("female")}</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
 
-                <TextField
-                  fullWidth
-                  required
-                  label={mt("dob")}
-                  value={dob}
-                  onChange={(e) => {
-                    setDob(e.target.value);
-                    if (dobError) setDobError("");
-                  }}
-                  onBlur={handleDobBlur}
-                  placeholder={mt("dob_placeholder")}
-                  error={!!dobError}
-                  helperText={dobError}
-                />
-
-                <TextField
-                  fullWidth
-                  label={mt("club")}
-                  value={club}
-                  onChange={(e) => setClub(e.target.value)}
-                />
                 <TextField
                   fullWidth
                   label={mt("si_code")}
                   value={siCard}
                   onChange={(e) => setSiCard(e.target.value)}
                 />
+                <TextField
+                  fullWidth
+                  label={mt("school_workplace")}
+                  value={club}
+                  onChange={(e) => setClub(e.target.value)}
+                />
+                <Autocomplete
+                  value={county}
+                  onChange={(_, value) => setCounty(value)}
+                  options={[...ESTONIAN_COUNTIES, mt("non_resident")]}
+                  renderInput={(params) => (
+                    <TextField {...params} label={mt("county")} />
+                  )}
+                />
+                <TextField
+                  fullWidth
+                  label={mt("email")}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                />
 
                 <Divider />
-                <Typography variant="subtitle2">{mt("registration")}</Typography>
+                <Typography variant="subtitle2">{et("registration")}</Typography>
 
                 {/* Competition group — optional, shows all groups */}
                 <FormControl fullWidth>
-                  <InputLabel>{mt("competition_group")}</InputLabel>
+                  <InputLabel>{et("competition_group")}</InputLabel>
                   <Select
                     value={competitionGroupName}
-                    label={mt("competition_group")}
+                    label={et("competition_group")}
                     onChange={(e) => setCompetitionGroupName(e.target.value)}
                   >
                     <MenuItem value="">—</MenuItem>
@@ -385,14 +433,14 @@ export function AddCompetitorButton({
 
                 {selectedGroupPrice != null && (
                   <Typography>
-                    {mt("price")}: {formatPrice(selectedGroupPrice)}
+                    {et("price")}: {formatPrice(selectedGroupPrice)}
                   </Typography>
                 )}
 
                 {/* Course as ToggleButtonGroup */}
                 <Box>
                   <Typography variant="body2" sx={{ mb: 0.5, color: "text.secondary" }}>
-                    {mt("course")} *
+                    {et("course")} *
                   </Typography>
                   <ToggleButtonGroup
                     exclusive
@@ -419,14 +467,14 @@ export function AddCompetitorButton({
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} disabled={saving}>
-            {mt("cancel")}
+            {et("cancel")}
           </Button>
           <Button
             variant="contained"
             onClick={() => void handleSave()}
             disabled={!canSave}
           >
-            {mt("save")}
+            {et("save")}
           </Button>
         </DialogActions>
       </Dialog>

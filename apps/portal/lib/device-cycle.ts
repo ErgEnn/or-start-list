@@ -9,7 +9,7 @@ import type {
 import { competitionGroupsResponseSchema, mapPreferencesResponseSchema, paymentGroupsResponseSchema } from "@or/shared";
 import { getSourceCompetitorChanges } from "@/lib/source-competitors";
 import type { DbLike } from "./db";
-import { competitionGroups, events, mapPreferences, paymentGroupCompetitors, paymentGroups, registrations, reservedCodes } from "./db/schema";
+import { competitionGroups, events, infoPages, mapPreferences, paymentGroupCompetitors, paymentGroups, registrations, reservedCodes } from "./db/schema";
 import { moneyFromDb } from "./money";
 import { applyOutboxItems, loadEventDataset } from "./sync";
 
@@ -136,19 +136,38 @@ async function loadReservedCodesSnapshot(client: DbLike) {
   return rows.map((row: { code: string; isReserved: boolean }) => ({ code: row.code, isReserved: true as const }));
 }
 
+async function loadInfoPagesSnapshot(client: DbLike) {
+  const rows = await client
+    .select({
+      id: infoPages.id,
+      title: infoPages.title,
+      content: infoPages.content,
+      updatedAt: infoPages.updatedAt,
+    })
+    .from(infoPages)
+    .orderBy(asc(infoPages.title));
+  return rows.map((row: { id: string; title: string; content: string; updatedAt: Date }) => ({
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    updatedAt: row.updatedAt.toISOString(),
+  }));
+}
+
 export async function loadDeviceCycle(
   client: DbLike,
   deviceId: string,
   request: DeviceSyncCycleRequest,
 ): Promise<DeviceSyncCycleResponse> {
   const pushResult = await applyOutboxItems(client, deviceId, request.pendingRegistrations);
-  const [eventRows, paymentGroupRows, mapPreferenceRows, competitionGroupRows, competitorDelta, reservedCodeRows] = await Promise.all([
+  const [eventRows, paymentGroupRows, mapPreferenceRows, competitionGroupRows, competitorDelta, reservedCodeRows, infoPageRows] = await Promise.all([
     loadEventsSnapshot(client),
     loadPaymentGroupsSnapshot(client),
     loadMapPreferencesSnapshot(client),
     loadCompetitionGroupsSnapshot(client),
     getSourceCompetitorChanges(request.sinceCompetitorVersion),
     loadReservedCodesSnapshot(client),
+    loadInfoPagesSnapshot(client),
   ]);
 
   const eventSnapshots = [];
@@ -171,5 +190,6 @@ export async function loadDeviceCycle(
     competitorDelta,
     eventSnapshots,
     reservedCodes: reservedCodeRows,
+    infoPages: infoPageRows,
   };
 }

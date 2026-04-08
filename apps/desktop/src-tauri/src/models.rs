@@ -288,6 +288,28 @@ pub struct DesktopQueryCompetitorsResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct InfoPagePayload {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, QueryableByName)]
+#[serde(rename_all = "camelCase")]
+pub struct InfoPageRow {
+    #[diesel(sql_type = Text)]
+    pub id: String,
+    #[diesel(sql_type = Text)]
+    pub title: String,
+    #[diesel(sql_type = Text)]
+    pub content: String,
+    #[diesel(sql_type = Text)]
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopBootstrapResponse {
     pub events: Vec<EventRow>,
     pub payment_groups: Vec<PaymentGroupPayload>,
@@ -296,6 +318,7 @@ pub struct DesktopBootstrapResponse {
     pub sync_status: DesktopSyncStatus,
     pub event_state: DesktopEventState,
     pub query_result: DesktopQueryCompetitorsResponse,
+    pub info_pages: Vec<InfoPagePayload>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -373,6 +396,8 @@ pub struct DesktopClaimReservedCodeRequest {
     pub dob: String,
     pub club: Option<String>,
     pub si_card: Option<String>,
+    pub county: Option<String>,
+    pub email: Option<String>,
     pub is_manual_eol: Option<bool>,
 }
 
@@ -388,6 +413,8 @@ pub struct ReservedCodeClaimedPayload {
     pub dob: Option<String>,
     pub club: Option<String>,
     pub si_card: Option<String>,
+    pub county: Option<String>,
+    pub email: Option<String>,
     pub is_manual_eol: Option<bool>,
 }
 
@@ -463,6 +490,8 @@ pub struct DeviceSyncCycleResponse {
     pub competitor_delta: CompetitorDeltaResponse,
     pub event_snapshots: Vec<PullPayload>,
     pub reserved_codes: Vec<ReservedCodePayload>,
+    #[serde(default)]
+    pub info_pages: Vec<InfoPagePayload>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

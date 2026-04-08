@@ -133,6 +133,13 @@ CREATE TABLE IF NOT EXISTS reserved_codes (
   is_reserved INTEGER NOT NULL DEFAULT 1
 );
 
+CREATE TABLE IF NOT EXISTS info_pages (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS competition_group_selections (
   event_id TEXT NOT NULL,
   competitor_id TEXT NOT NULL,

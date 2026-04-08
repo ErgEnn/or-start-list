@@ -1,10 +1,10 @@
 "use client";
 
-import { Button, Card, Form, Input, Modal, Space, Statistic, Switch, Table, message } from "antd";
+import { Button, Card, Descriptions, Form, Input, Modal, Space, Statistic, Switch, Table, message } from "antd";
 import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
 import { useEffect, useRef, useState } from "react";
-import { UploadOutlined } from "@ant-design/icons";
+import { CopyOutlined, UploadOutlined } from "@ant-design/icons";
 import { useT } from "@/lib/i18n-client";
 
 type ReservedCodeRow = {
@@ -17,9 +17,15 @@ type ReservedCodeRow = {
   dob: string | null;
   club: string | null;
   siCard: string | null;
+  county: string | null;
+  email: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+function eolLink(eolNumber: string) {
+  return `https://pass.orienteerumine.ee/kood/index.php?act=Muuda&kood=${encodeURIComponent(eolNumber)}`;
+}
 
 export default function ReservedCodesPage() {
   const t = useT();
@@ -28,6 +34,7 @@ export default function ReservedCodesPage() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [updatingCode, setUpdatingCode] = useState<string | null>(null);
+  const [detailRow, setDetailRow] = useState<ReservedCodeRow | null>(null);
   const [messageApi, contextHolder] = message.useMessage();
   const [form] = Form.useForm<{ code: string }>();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -177,11 +184,24 @@ export default function ReservedCodesPage() {
           locale={{ emptyText: t("reservedCodes.empty") }}
           scroll={{ x: 1200 }}
           columns={[
-            { title: t("reservedCodes.code"), dataIndex: "code", key: "code", width: 180 },
+            {
+              title: t("reservedCodes.eolNumber"),
+              dataIndex: "eolNumber",
+              key: "eolNumber",
+              width: 140,
+              render: (value: string | null, row: ReservedCodeRow) => {
+                const code = value ?? row.code;
+                return (
+                  <a href={eolLink(code)} target="_blank" rel="noopener noreferrer">
+                    {code}
+                  </a>
+                );
+              },
+            },
             {
               title: t("reservedCodes.isReserved"),
               key: "isReserved",
-              width: 160,
+              width: 120,
               render: (_, row: ReservedCodeRow) => (
                 <Switch
                   checked={row.isReserved}
@@ -189,13 +209,6 @@ export default function ReservedCodesPage() {
                   onChange={(nextValue) => handleReservedToggle(row, nextValue)}
                 />
               ),
-            },
-            {
-              title: t("reservedCodes.eolNumber"),
-              dataIndex: "eolNumber",
-              key: "eolNumber",
-              width: 140,
-              render: (value: string | null) => value ?? "-",
             },
             {
               title: t("reservedCodes.firstName"),
@@ -212,22 +225,55 @@ export default function ReservedCodesPage() {
               render: (value: string | null) => value ?? "-",
             },
             {
-              title: t("reservedCodes.club"),
-              dataIndex: "club",
-              key: "club",
-              width: 180,
-              render: (value: string | null) => value ?? "-",
-            },
-            {
-              title: t("reservedCodes.siCard"),
-              dataIndex: "siCard",
-              key: "siCard",
-              width: 140,
-              render: (value: string | null) => value ?? "-",
+              title: t("reservedCodes.details"),
+              key: "details",
+              width: 100,
+              render: (_, row: ReservedCodeRow) => (
+                <Button type="link" onClick={() => setDetailRow(row)}>{t("reservedCodes.details")}</Button>
+              ),
             },
           ]}
         />
       </Card>
+      <Modal
+        title={t("reservedCodes.detailsTitle")}
+        open={detailRow !== null}
+        onCancel={() => setDetailRow(null)}
+        footer={null}
+      >
+        {detailRow && (
+          <Descriptions column={1} bordered size="small">
+            {[
+              { label: t("reservedCodes.eolNumber"), value: detailRow.eolNumber ?? detailRow.code, link: true },
+              { label: t("reservedCodes.firstName"), value: detailRow.firstName },
+              { label: t("reservedCodes.lastName"), value: detailRow.lastName },
+              { label: t("reservedCodes.dob"), value: detailRow.dob },
+              { label: t("reservedCodes.club"), value: detailRow.club },
+              { label: t("reservedCodes.siCard"), value: detailRow.siCard },
+              { label: t("reservedCodes.county"), value: detailRow.county },
+              { label: t("reservedCodes.email"), value: detailRow.email },
+            ].map((item) => (
+              <Descriptions.Item key={item.label} label={item.label}>
+                <Space>
+                  {item.link && item.value ? (
+                    <a href={eolLink(item.value)} target="_blank" rel="noopener noreferrer">{item.value}</a>
+                  ) : (
+                    item.value ?? "-"
+                  )}
+                  {item.value && (
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={<CopyOutlined />}
+                      onClick={() => { void navigator.clipboard.writeText(item.value!); messageApi.success("Copied"); }}
+                    />
+                  )}
+                </Space>
+              </Descriptions.Item>
+            ))}
+          </Descriptions>
+        )}
+      </Modal>
       <Modal
         title={t("reservedCodes.modalCreateTitle")}
         open={isAddModalOpen}

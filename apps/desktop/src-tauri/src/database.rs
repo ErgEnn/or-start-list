@@ -7,13 +7,14 @@ use diesel::{
 };
 use std::{collections::HashMap, path::PathBuf, sync::Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
-use time::{format_description::well_known::Rfc3339, Date, Month, OffsetDateTime};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
 use crate::models::{
     BaseCompetitorRow, CompetitionGroupPayload, CompetitionGroupRow, CompetitionGroupSelectionRow,
     ConfigRow, ConfigValueRow, CountRow, DesktopClaimReservedCodeRequest, DesktopCreateRegistrationRequest,
+    InfoPagePayload, InfoPageRow,
     DesktopCreateRegistrationResponse, DesktopClearRegistrationRequest, DesktopEventState,
     DesktopUpdateRegistrationPaymentRequest,
     DesktopQueryCompetitorsRequest, DesktopQueryCompetitorsResponse, DesktopSetCompetitionGroupRequest,
@@ -63,8 +64,8 @@ pub fn conn(state: &State<AppState>) -> Result<SqliteConnection, String> {
     let db_file = db_path(state)?;
     let mut connection = SqliteConnection::establish(db_file.to_string_lossy().as_ref())
         .map_err(|error| error.to_string())?;
-    sql_query("PRAGMA journal_mode=WAL").execute(&mut connection).map_err(|e| e.to_string())?;
     sql_query("PRAGMA busy_timeout=5000").execute(&mut connection).map_err(|e| e.to_string())?;
+    sql_query("PRAGMA journal_mode=WAL").execute(&mut connection).map_err(|e| e.to_string())?;
     Ok(connection)
 }
 
@@ -129,6 +130,16 @@ pub fn init_schema(db: &mut SqliteConnection) -> Result<(), String> {
         "payment_method",
         "payment_method TEXT NOT NULL DEFAULT 'cash'",
     )?;
+    ensure_column(db, "reserved_codes", "competitor_id", "competitor_id TEXT")?;
+    ensure_column(db, "reserved_codes", "eol_number", "eol_number TEXT")?;
+    ensure_column(db, "reserved_codes", "first_name", "first_name TEXT")?;
+    ensure_column(db, "reserved_codes", "last_name", "last_name TEXT")?;
+    ensure_column(db, "reserved_codes", "gender", "gender TEXT")?;
+    ensure_column(db, "reserved_codes", "dob", "dob TEXT")?;
+    ensure_column(db, "reserved_codes", "club", "club TEXT")?;
+    ensure_column(db, "reserved_codes", "si_card", "si_card TEXT")?;
+    ensure_column(db, "reserved_codes", "county", "county TEXT")?;
+    ensure_column(db, "reserved_codes", "email", "email TEXT")?;
     Ok(())
 }
 
@@ -316,6 +327,22 @@ pub fn load_competition_groups(db: &mut SqliteConnection) -> Result<Vec<Competit
     })
 }
 
+pub fn load_info_pages(db: &mut SqliteConnection) -> Result<Vec<InfoPagePayload>, String> {
+    sql_query("SELECT id, title, content, updated_at FROM info_pages ORDER BY title")
+        .load::<InfoPageRow>(db)
+        .map_err(|error| error.to_string())
+        .map(|rows| {
+            rows.into_iter()
+                .map(|row| InfoPagePayload {
+                    id: row.id,
+                    title: row.title,
+                    content: row.content,
+                    updated_at: row.updated_at,
+                })
+                .collect()
+        })
+}
+
 pub fn load_selected_event_id(db: &mut SqliteConnection) -> Result<String, String> {
     let rows = sql_query("SELECT config_value FROM device_config WHERE config_key = ?")
         .bind::<Text, _>(SELECTED_EVENT_KEY)
@@ -337,51 +364,6 @@ pub fn ensure_selected_event_id(db: &mut SqliteConnection) -> Result<String, Str
         .unwrap_or_default();
     upsert_device_config_value(db, SELECTED_EVENT_KEY, &fallback).map_err(|error| error.to_string())?;
     Ok(fallback)
-}
-
-fn parse_event_start_date(value: &str) -> Option<Date> {
-    let mut segments = value.split('-');
-    let year = segments.next()?.parse().ok()?;
-    let month = Month::try_from(segments.next()?.parse::<u8>().ok()?).ok()?;
-    let day = segments.next()?.parse().ok()?;
-    if segments.next().is_some() {
-        return None;
-    }
-    Date::from_calendar_date(year, month, day).ok()
-}
-
-fn find_closest_event_id(events: &[EventRow], today: Date) -> Option<String> {
-    let today_julian_day = today.to_julian_day();
-    events
-        .iter()
-        .filter_map(|event| {
-            let start_date = parse_event_start_date(event.start_date.as_deref()?)?;
-            let day_distance = (start_date.to_julian_day() - today_julian_day).abs();
-            Some((day_distance, event.event_id.clone()))
-        })
-        .min_by_key(|(day_distance, _)| *day_distance)
-        .map(|(_, event_id)| event_id)
-}
-
-fn select_startup_event_id_for_date(db: &mut SqliteConnection, today: Date) -> Result<String, String> {
-    let events = load_events(db)?;
-    let current_selected = load_selected_event_id(db)?;
-    let selected = find_closest_event_id(&events, today)
-        .or_else(|| {
-            if !current_selected.is_empty() && events.iter().any(|event| event.event_id == current_selected) {
-                Some(current_selected.clone())
-            } else {
-                None
-            }
-        })
-        .or_else(|| events.first().map(|event| event.event_id.clone()))
-        .unwrap_or_default();
-    upsert_device_config_value(db, SELECTED_EVENT_KEY, &selected).map_err(|error| error.to_string())?;
-    Ok(selected)
-}
-
-pub fn select_startup_event_id(db: &mut SqliteConnection) -> Result<String, String> {
-    select_startup_event_id_for_date(db, OffsetDateTime::now_utc().date())
 }
 
 pub fn load_courses(db: &mut SqliteConnection, event_id: &str) -> Result<Vec<crate::models::CourseRow>, String> {
@@ -999,11 +981,26 @@ pub fn claim_reserved_code(
         .bind::<diesel::sql_types::Nullable<Text>, _>(request.si_card.as_deref())
         .execute(connection)?;
 
-        // 2. Mark reserved code as claimed (only if using reserved code, not manual EOL)
+        // 2. Mark reserved code as claimed and store on-site registration data
         if !is_manual_eol {
-            sql_query("UPDATE reserved_codes SET is_reserved = 0 WHERE code = ?")
-                .bind::<Text, _>(&request.code)
-                .execute(connection)?;
+            sql_query(
+                "UPDATE reserved_codes SET is_reserved = 0, \
+                 competitor_id = ?, eol_number = ?, first_name = ?, last_name = ?, \
+                 gender = ?, dob = ?, club = ?, si_card = ?, county = ?, email = ? \
+                 WHERE code = ?",
+            )
+            .bind::<Text, _>(&competitor_id)
+            .bind::<Text, _>(&eol_number)
+            .bind::<Text, _>(&request.first_name)
+            .bind::<Text, _>(&request.last_name)
+            .bind::<diesel::sql_types::Nullable<Text>, _>(Some(request.gender.as_str()))
+            .bind::<diesel::sql_types::Nullable<Text>, _>(Some(request.dob.as_str()))
+            .bind::<diesel::sql_types::Nullable<Text>, _>(request.club.as_deref())
+            .bind::<diesel::sql_types::Nullable<Text>, _>(request.si_card.as_deref())
+            .bind::<diesel::sql_types::Nullable<Text>, _>(request.county.as_deref())
+            .bind::<diesel::sql_types::Nullable<Text>, _>(request.email.as_deref())
+            .bind::<Text, _>(&request.code)
+            .execute(connection)?;
         }
 
         // 3. Get next local_seq
@@ -1029,6 +1026,8 @@ pub fn claim_reserved_code(
             dob: Some(request.dob.clone()),
             club: request.club.clone(),
             si_card: request.si_card.clone(),
+            county: request.county.clone(),
+            email: request.email.clone(),
             is_manual_eol: Some(is_manual_eol),
         })
         .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
@@ -1704,29 +1703,4 @@ mod tests {
         assert_eq!(eligible[1].name, "N21");
     }
 
-    #[test]
-    fn select_startup_event_id_prefers_event_closest_to_today() {
-        let mut db = open_temp_db("startup-event-selection");
-        sql_query(
-            "INSERT INTO events(event_id, name, start_date) VALUES \
-             ('event-past', 'Past Event', '2026-03-20'), \
-             ('event-closest', 'Closest Event', '2026-03-23'), \
-             ('event-future', 'Future Event', '2026-03-30')",
-        )
-        .execute(&mut db)
-        .expect("insert events");
-        upsert_device_config_value(&mut db, SELECTED_EVENT_KEY, "event-future").expect("seed selected event");
-
-        let selected_event_id = select_startup_event_id_for_date(
-            &mut db,
-            Date::from_calendar_date(2026, Month::March, 22).expect("valid date"),
-        )
-        .expect("select startup event");
-
-        assert_eq!(selected_event_id, "event-closest");
-        assert_eq!(
-            load_selected_event_id(&mut db).expect("load selected event"),
-            "event-closest"
-        );
-    }
 }

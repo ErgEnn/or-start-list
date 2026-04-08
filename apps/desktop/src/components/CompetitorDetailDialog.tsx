@@ -186,7 +186,7 @@ export function CompetitorDetailDialog({
                 {t('other')}
               </Typography>
               {mapPreference?.waterproofMap ? (
-                <Box sx={{ mt: 0.5 }}><Chip label={t('waterproof_map')} color="info" size="small" /></Box>
+                <Box sx={{ mt: 0.5 }}><Chip label={t('waterproof_map')} color="info" sx={{ fontSize: scaledFontSize, height: 'auto', '& .MuiChip-label': { py: 0.5 } }} /></Box>
               ) : (
                 <Typography variant="body1" sx={{ fontSize: scaledFontSize }}>—</Typography>
               )}
@@ -263,7 +263,7 @@ export function CompetitorDetailDialog({
               exclusive
               value={localPaymentMethod}
               disabled={submitting}
-              sx={{ flexWrap: 'wrap', width: '100%' }}
+              sx={{ flexWrap: 'wrap', width: '100%', '& .MuiToggleButtonGroup-grouped': { border: '1px solid', borderColor: 'divider', borderRadius: '4px !important' } }}
               onChange={(_, value: PaymentMethod | null) => {
                 if (value) {
                   setLocalPaymentMethod(value);

@@ -25,6 +25,8 @@ export async function GET() {
       dob: reservedCodes.dob,
       club: reservedCodes.club,
       siCard: reservedCodes.siCard,
+      county: reservedCodes.county,
+      email: reservedCodes.email,
       createdAt: reservedCodes.createdAt,
       updatedAt: reservedCodes.updatedAt,
     })

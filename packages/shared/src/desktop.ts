@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { competitionGroupSchema, competitorSchema, courseSchema, eventSchema, mapPreferenceMemberSchema, paymentGroupSchema, paymentMethodSchema, reservedCodeSchema } from "./domain";
+import { competitionGroupSchema, competitorSchema, courseSchema, eventSchema, infoPageSchema, mapPreferenceMemberSchema, paymentGroupSchema, paymentMethodSchema, reservedCodeSchema } from "./domain";
 import { competitorDeltaResponseSchema, outboxItemSchema, pullResponseSchema, pushResponseSchema } from "./sync";
 
 export const desktopSyncStatusSchema = z.object({
@@ -79,6 +79,7 @@ export const desktopBootstrapSchema = z.object({
   syncStatus: desktopSyncStatusSchema,
   eventState: desktopEventStateSchema,
   queryResult: desktopQueryCompetitorsResponseSchema,
+  infoPages: z.array(infoPageSchema),
 });
 
 export const desktopCreateRegistrationRequestSchema = z.object({
@@ -125,6 +126,8 @@ export const desktopClaimReservedCodeRequestSchema = z.object({
   dob: z.string().min(1),
   club: z.string().optional(),
   siCard: z.string().optional(),
+  county: z.string().optional(),
+  email: z.string().optional(),
   isManualEol: z.boolean().optional(),
 });
 
@@ -145,6 +148,7 @@ export const deviceSyncCycleResponseSchema = z.object({
   competitorDelta: competitorDeltaResponseSchema,
   eventSnapshots: z.array(pullResponseSchema),
   reservedCodes: z.array(reservedCodeSchema),
+  infoPages: z.array(infoPageSchema),
 });
 
 export type DesktopSyncStatus = z.infer<typeof desktopSyncStatusSchema>;

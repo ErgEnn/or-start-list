@@ -1,0 +1,19 @@
+@import "../../../styles/variables";
+@import "../../../styles/keyframe-animations";
+
+.simple-editor-wrapper {
+  --tt-toolbar-height: 44px;
+  width: 100%;
+  overflow: auto;
+}
+
+.simple-editor-content {
+  width: 100%;
+}
+
+.simple-editor-content .tiptap.ProseMirror.simple-editor {
+  padding: 1rem;
+  min-height: 200px;
+  outline: none;
+  font-family: sans-serif;
+}

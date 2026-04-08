@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
+import { Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Typography } from '@mui/material';
+import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import type { DesktopSyncStatus } from '@or/shared';
 import { t } from '../i18n';
 
@@ -8,6 +9,8 @@ type StatusBarProps = {
   error: string;
   lastUpdatedAt: Date | null;
   syncStatus: DesktopSyncStatus;
+  infoPageCount: number;
+  onInfoClick: () => void;
 };
 
 function formatLastUpdated(lastUpdatedAt: Date | null) {
@@ -43,6 +46,8 @@ export function StatusBar({
   error,
   lastUpdatedAt,
   syncStatus,
+  infoPageCount,
+  onInfoClick,
 }: StatusBarProps) {
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
   const statusError = error || syncStatus.lastError;
@@ -99,6 +104,11 @@ export function StatusBar({
             >
               {statusError}
             </Box>
+          ) : null}
+          {infoPageCount > 0 ? (
+            <IconButton size="small" onClick={onInfoClick} sx={{ ml: 'auto', p: 0 }}>
+              <InfoOutlined sx={{ fontSize: '1rem' }} />
+            </IconButton>
           ) : null}
         </Box>
       </Box>

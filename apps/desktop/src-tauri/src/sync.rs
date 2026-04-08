@@ -284,6 +284,18 @@ pub fn apply_cycle_response(
                 .execute(connection)?;
         }
 
+        sql_query("DELETE FROM info_pages").execute(connection)?;
+        for page in &payload.info_pages {
+            sql_query(
+                "INSERT INTO info_pages(id, title, content, updated_at) VALUES (?, ?, ?, ?)",
+            )
+            .bind::<Text, _>(&page.id)
+            .bind::<Text, _>(&page.title)
+            .bind::<Text, _>(&page.content)
+            .bind::<Text, _>(&page.updated_at)
+            .execute(connection)?;
+        }
+
         for change in &payload.competitor_delta.changes {
             if change.change_type == "delete" {
                 sql_query("DELETE FROM source_competitors WHERE competitor_id = ?")
@@ -492,10 +504,17 @@ pub async fn sync_loop(app: AppHandle) {
     let mut failure_count = 0u32;
 
     loop {
-        let pending = conn_from_app(&app)
-            .and_then(|mut db| crate::database::pending_registrations_count(&mut db))
-            .unwrap_or(0);
         let full_cycle_due = last_full_cycle.elapsed() >= Duration::from_secs(60);
+        let pending = if full_cycle_due {
+            // Skip the DB check — we're syncing anyway
+            0
+        } else {
+            let state = app.state::<crate::database::AppState>();
+            let _guard = state.sync_lock.lock().await;
+            conn_from_app(&app)
+                .and_then(|mut db| crate::database::pending_registrations_count(&mut db))
+                .unwrap_or(0)
+        };
         let should_sync = pending > 0 || full_cycle_due;
 
         if should_sync {
@@ -637,6 +656,7 @@ mod tests {
                 },
             }],
             reserved_codes: Vec::new(),
+            info_pages: Vec::new(),
         };
 
         apply_cycle_response(&mut db, &payload).expect("apply cycle");

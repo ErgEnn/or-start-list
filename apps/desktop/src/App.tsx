@@ -11,6 +11,7 @@ import { AddCompetitorButton } from './components/AddCompetitorButton';
 import { RecentsList } from './components/RecentsList';
 import { SiReaderButton } from './components/SiReaderButton';
 import { StatusBar } from './components/StatusBar';
+import { InfoPagesDialog } from './components/InfoPagesDialog';
 import { TitleBar } from './components/TitleBar';
 import { EventSelectionDialog } from './components/EventSelectionDialog';
 import { useCompetitorDirectory } from './hooks/useCompetitorDirectory';
@@ -51,6 +52,7 @@ export function App() {
     setSelectedEventId,
     courses,
     competitionGroups,
+    infoPages,
     mapPreferences,
     selectedCoursesByCompetitor,
     selectedRegistrationsByCompetitor,
@@ -59,6 +61,7 @@ export function App() {
     selectCourseForCompetitor,
     updateRegistrationPayment,
   } = useCompetitorDirectory(deviceConfigRevision);
+  const [infoPagesOpen, setInfoPagesOpen] = useState(false);
   const [selectedJumpLetter, setSelectedJumpLetter] = useState<string | null>(null);
   const [focusedCompetitor, setFocusedCompetitor] = useState<{ competitorId: string; token: number } | null>(null);
   const [openCompetitorId, setOpenCompetitorId] = useState<{ competitorId: string; token: number } | null>(null);
@@ -298,6 +301,13 @@ export function App() {
         error={error}
         lastUpdatedAt={lastUpdatedAt}
         syncStatus={syncStatus}
+        infoPageCount={infoPages.length}
+        onInfoClick={() => setInfoPagesOpen(true)}
+      />
+      <InfoPagesDialog
+        open={infoPagesOpen}
+        infoPages={infoPages}
+        onClose={() => setInfoPagesOpen(false)}
       />
     </Column>
     </Box>

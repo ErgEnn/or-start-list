@@ -84,6 +84,7 @@ const translations: Record<string, string> = {
   eol_number_required: 'Valige reserveeritud kood või sisestage EOL number.',
   error_details: 'Vea üksikasjad',
   close: 'Sulge',
+  info_pages: 'Infolehed',
   force_sync: 'Sünkrooni kohe',
   force_sync_success: 'Sünkroonimine õnnestus.',
   force_sync_failed: 'Sünkroonimine ebaõnnestus.',

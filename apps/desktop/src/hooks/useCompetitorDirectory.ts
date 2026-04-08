@@ -5,6 +5,7 @@ import type {
   DesktopRecentRegistration,
   DesktopSyncStatus,
   Event,
+  InfoPage,
   MapPreferenceMember,
   PaymentGroup,
   PaymentMethod,
@@ -32,6 +33,7 @@ type UseCompetitorDirectoryResult = {
   paymentGroups: PaymentGroup[];
   mapPreferences: MapPreferenceMember[];
   competitionGroups: CompetitionGroup[];
+  infoPages: InfoPage[];
   selectedFilter: string;
   setSelectedFilter: (filterId: string) => void;
   searchInput: string;
@@ -68,6 +70,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
   const [paymentGroups, setPaymentGroups] = useState<PaymentGroup[]>([]);
   const [mapPreferences, setMapPreferences] = useState<MapPreferenceMember[]>([]);
   const [competitionGroups, setCompetitionGroups] = useState<CompetitionGroup[]>([]);
+  const [infoPages, setInfoPages] = useState<InfoPage[]>([]);
   const [selectedFilter, setSelectedFilter] = useState(ALL_FILTER_ID);
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -330,6 +333,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
         setPaymentGroups(bootstrap.paymentGroups);
         setMapPreferences(bootstrap.mapPreferences);
         setCompetitionGroups(bootstrap.competitionGroups);
+        setInfoPages(bootstrap.infoPages);
         setSyncStatus(bootstrap.syncStatus);
         applyEventState(bootstrap.eventState);
         await refreshQuery(latestFilterRef.current, latestSearchQueryRef.current);
@@ -371,6 +375,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
         setPaymentGroups(bootstrap.paymentGroups);
         setMapPreferences(bootstrap.mapPreferences);
         setCompetitionGroups(bootstrap.competitionGroups);
+        setInfoPages(bootstrap.infoPages);
         applyEventState(bootstrap.eventState);
         await refreshQuery(latestFilterRef.current, latestSearchQueryRef.current);
         setLastHydratedSyncAt(bootstrap.syncStatus.lastSuccessfulSyncAt);
@@ -455,6 +460,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     paymentGroups,
     mapPreferences,
     competitionGroups,
+    infoPages,
     selectedFilter,
     setSelectedFilter,
     searchInput,

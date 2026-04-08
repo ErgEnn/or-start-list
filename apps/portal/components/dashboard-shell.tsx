@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarOutlined, CompassOutlined, DesktopOutlined, HomeOutlined, LogoutOutlined, TableOutlined, TagOutlined, TeamOutlined } from "@ant-design/icons";
+import { CalendarOutlined, CompassOutlined, DesktopOutlined, FileTextOutlined, HomeOutlined, LogoutOutlined, TableOutlined, TagOutlined, TeamOutlined } from "@ant-design/icons";
 import { Button, Layout, Menu, Select, Space } from "antd";
 import Title from "antd/es/typography/Title";
 import { signOut } from "next-auth/react";
@@ -64,6 +64,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               key: "/dashboard/reserved-codes",
               icon: <TagOutlined />,
               label: <Link href="/dashboard/reserved-codes">{t("nav.reservedCodes")}</Link>,
+            },
+            {
+              key: "/dashboard/info-pages",
+              icon: <FileTextOutlined />,
+              label: <Link href="/dashboard/info-pages">{t("nav.infoPages")}</Link>,
             },
             {
               key: "/dashboard/devices",

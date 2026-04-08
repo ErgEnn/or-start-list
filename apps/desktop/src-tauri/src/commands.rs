@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::database::{
     claim_reserved_code, clear_registration, conn, create_registration, emit_sync_status, init_schema,
     load_all_registrations, load_available_reserved_codes, load_competition_groups, load_device_config_map,
-    load_event_state, load_events, load_map_preferences, load_payment_groups, load_sync_status_from_db, query_competitors,
+    load_event_state, load_events, load_info_pages, load_map_preferences, load_payment_groups, load_sync_status_from_db, query_competitors,
     refresh_in_memory_sync_status, reset_competitor_sync_state, save_competition_group_selection,
     ensure_selected_event_id, update_registration_payment, upsert_device_config_value, AppState,
 };
@@ -54,6 +54,7 @@ pub fn desktop_bootstrap(state: State<AppState>) -> Result<DesktopBootstrapRespo
                 query: String::new(),
             },
         )?,
+        info_pages: load_info_pages(&mut db)?,
     })
 }
 
@@ -227,4 +228,9 @@ pub fn si_get_status(app: AppHandle) -> Result<bool, String> {
     let state = app.state::<SiReaderState>();
     let connected = *state.connected.lock().map_err(|_| "Lock failed".to_string())?;
     Ok(connected)
+}
+
+#[tauri::command]
+pub fn open_external_url(url: String) -> Result<(), String> {
+    open::that(&url).map_err(|e| e.to_string())
 }
