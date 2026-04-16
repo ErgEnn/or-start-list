@@ -8,6 +8,7 @@ import {
   courses,
   eventSnapshotVersions,
   events,
+  paymentGroupCompetitors,
   pricingRules,
   quickFilters,
   registrations,
@@ -81,27 +82,22 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
           .update(reservedCodes)
           .set({
             isReserved: false,
-            competitorId: payload.competitorId,
             eolNumber: payload.eolNumber,
-            firstName: payload.firstName,
-            lastName: payload.lastName,
-            dob: payload.dob ?? null,
-            club: payload.club ?? null,
-            siCard: payload.siCard ?? null,
-            county: payload.county ?? null,
-            email: payload.email ?? null,
             updatedAt: now,
           })
           .where(eq(reservedCodes.code, payload.code));
       }
+
+      const firstName = payload.firstName ?? "";
+      const lastName = payload.lastName ?? "";
 
       const payloadHash = createHash("sha256")
         .update(
           [
             payload.competitorId,
             payload.eolNumber,
-            payload.firstName,
-            payload.lastName,
+            firstName,
+            lastName,
             payload.gender ?? "",
             payload.dob ?? "",
             payload.club ?? "",
@@ -120,8 +116,8 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
         .values({
           competitorId: payload.competitorId,
           eolNumber: payload.eolNumber,
-          firstName: payload.firstName,
-          lastName: payload.lastName,
+          firstName,
+          lastName,
           gender: payload.gender ?? null,
           dob: payload.dob ?? null,
           club: payload.club ?? null,
@@ -147,6 +143,22 @@ export async function applyOutboxItems(client: DbLike, deviceId: string, items: 
           },
         });
 
+      acceptedCount += 1;
+      ackSeqInclusive = Math.max(ackSeqInclusive, item.localSeq);
+      continue;
+    }
+
+    if (item.type === "payment_group_member_added") {
+      const payload = item.payload;
+      await client
+        .insert(paymentGroupCompetitors)
+        .values({
+          paymentGroupId: payload.paymentGroupId,
+          competitorId: payload.competitorId,
+        })
+        .onConflictDoNothing({
+          target: [paymentGroupCompetitors.paymentGroupId, paymentGroupCompetitors.competitorId],
+        });
       acceptedCount += 1;
       ackSeqInclusive = Math.max(ackSeqInclusive, item.localSeq);
       continue;

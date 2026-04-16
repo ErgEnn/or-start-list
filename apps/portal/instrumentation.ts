@@ -2,6 +2,7 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
     const { ensurePortalSchema } = await import("@/lib/db");
     const { startSourceCompetitorImportScheduler } = await import("@/lib/source-competitor-scheduler");
+    const { startSourceCompetitorCsvPoller } = await import("@/lib/source-competitor-poller");
     try {
       await ensurePortalSchema();
       console.log("Database schema applied successfully.");
@@ -14,6 +15,12 @@ export async function register() {
       await startSourceCompetitorImportScheduler();
     } catch (error) {
       console.error("Failed to start source competitor scheduler; manual imports remain available:", error);
+    }
+
+    try {
+      startSourceCompetitorCsvPoller();
+    } catch (error) {
+      console.error("Failed to start CSV competitor poller:", error);
     }
   }
 }

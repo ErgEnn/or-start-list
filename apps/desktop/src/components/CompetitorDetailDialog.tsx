@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -8,6 +9,7 @@ import {
   DialogContent,
   DialogTitle,
   FormControl,
+  FormHelperText,
   InputLabel,
   MenuItem,
   Select,
@@ -15,9 +17,11 @@ import {
   TextField,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material';
-import type { CompetitionGroup, Course, DesktopCompetitorRow, MapPreferenceMember, PaymentMethod, SelectedRegistrationInfo } from '@or/shared';
+import { UNDECIDED_COURSE_ID, type CompetitionGroup, type Course, type DesktopCompetitorRow, type MapPreferenceMember, type PaymentGroup, type PaymentMethod, type SelectedRegistrationInfo } from '@or/shared';
+import { desktopUpdateCompetitorData } from '../lib/desktop';
 import { t } from '../i18n';
 
 type CompetitorDetailDialogProps = {
@@ -31,8 +35,10 @@ type CompetitorDetailDialogProps = {
   selectedRegistration: SelectedRegistrationInfo | null;
   submitting: boolean;
   onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
-  onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod) => Promise<void>;
+  onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod, competitionGroupName?: string) => Promise<void>;
   onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: PaymentMethod) => Promise<void>;
+  paymentGroups: PaymentGroup[];
+  onAddPaymentGroupMember: (paymentGroupId: string, competitorId: string) => Promise<void>;
   onClose: () => void;
 };
 
@@ -73,6 +79,8 @@ export function CompetitorDetailDialog({
   onSelectCompetitionGroup,
   onSelectCourse,
   onUpdateRegistrationPayment,
+  paymentGroups,
+  onAddPaymentGroupMember,
   onClose,
 }: CompetitorDetailDialogProps) {
   const genderMissing = !competitor.gender;
@@ -81,6 +89,11 @@ export function CompetitorDetailDialog({
   const [localGender, setLocalGender] = useState<string>(competitor.gender ?? '');
   const [localDob, setLocalDob] = useState<string>(competitor.dob ?? '');
   const [localCompetitionGroup, setLocalCompetitionGroup] = useState(competitor.selectedCompetitionGroupName);
+  const [genderError, setGenderError] = useState('');
+  const [dobError, setDobError] = useState('');
+  const [competitionGroupError, setCompetitionGroupError] = useState('');
+  const [courseError, setCourseError] = useState('');
+  const [saveError, setSaveError] = useState('');
 
   const mapPreferredCourseId = useMemo(() => {
     if (!mapPreference) return null;
@@ -91,40 +104,123 @@ export function CompetitorDetailDialog({
   const [localCourseId, setLocalCourseId] = useState(
     selectedCourseId ?? mapPreferredCourseId,
   );
-  const initialPaymentMethod = selectedRegistration?.paymentMethod ?? 'cash';
+  const existingPaymentGroupId = useMemo(() => {
+    for (const group of paymentGroups) {
+      if (group.competitorIds.includes(competitor.competitorId)) {
+        return group.paymentGroupId;
+      }
+    }
+    return null;
+  }, [paymentGroups, competitor.competitorId]);
+
+  const paymentGroupOverridesTo0 = useMemo(() => {
+    if (!existingPaymentGroupId) return false;
+    const group = paymentGroups.find((g) => g.paymentGroupId === existingPaymentGroupId);
+    if (!group) return false;
+    const member = group.competitors.find((m) => m.competitorId === competitor.competitorId);
+    if (member?.priceOverrideCents === 0) return true;
+    if (group.globalPriceOverride != null && Math.round(group.globalPriceOverride * 100) === 0) return true;
+    return false;
+  }, [existingPaymentGroupId, paymentGroups, competitor.competitorId]);
+
+  const initialPaymentMethod = selectedRegistration?.paymentMethod ?? (paymentGroupOverridesTo0 ? 'other' : 'cash');
   const initialPaidPriceCents = selectedRegistration?.paidPriceCents ?? (competitor.priceCents ?? 0);
   const initialIsCustomPrice = selectedRegistration != null && selectedRegistration.paidPriceCents !== (competitor.priceCents ?? 0);
 
   const [localPaymentMethod, setLocalPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod);
   const [localPaidPriceInput, setLocalPaidPriceInput] = useState(initialIsCustomPrice ? (initialPaidPriceCents / 100).toFixed(2) : '');
   const [useCustomPrice, setUseCustomPrice] = useState(initialIsCustomPrice);
+  const [localPaymentGroupId, setLocalPaymentGroupId] = useState('');
 
   const eligibleGroups = useMemo(
     () => getEligibleGroups(localGender || null, localDob || null, allCompetitionGroups),
     [localGender, localDob, allCompetitionGroups],
   );
 
+  const selectedGroupPriceCents = useMemo(() => {
+    if (!localCompetitionGroup) return null;
+    const group = allCompetitionGroups.find((g) => g.name === localCompetitionGroup);
+    return group?.priceCents ?? null;
+  }, [localCompetitionGroup, allCompetitionGroups]);
+
   const competitionGroupChanged = localCompetitionGroup !== competitor.selectedCompetitionGroupName;
   const courseChanged = localCourseId !== selectedCourseId;
   const paymentMethodChanged = localPaymentMethod !== initialPaymentMethod;
+  const paymentGroupPriceOverride = useMemo(() => {
+    const groupId = localPaymentGroupId || existingPaymentGroupId;
+    if (!groupId) return null;
+    const group = paymentGroups.find((g) => g.paymentGroupId === groupId);
+    return group?.globalPriceOverride != null ? Math.round(group.globalPriceOverride * 100) : null;
+  }, [localPaymentGroupId, existingPaymentGroupId, paymentGroups]);
+
+  const groupPriceCents = selectedGroupPriceCents ?? competitor.priceCents ?? 0;
+  const basePriceCents = paymentGroupPriceOverride != null
+    ? Math.min(paymentGroupPriceOverride, groupPriceCents)
+    : groupPriceCents;
   const effectivePaidPriceCents = useCustomPrice
     ? Math.round((Number.parseFloat(localPaidPriceInput) || 0) * 100)
-    : (competitor.priceCents ?? 0);
+    : basePriceCents;
   const priceChanged = effectivePaidPriceCents !== initialPaidPriceCents;
-  const hasChanges = competitionGroupChanged || courseChanged || paymentMethodChanged || priceChanged;
+  const paymentGroupChanged = localPaymentGroupId !== '';
+  const hasChanges = competitionGroupChanged || courseChanged || paymentMethodChanged || priceChanged || paymentGroupChanged;
 
   const scaledFontSize = `${textScale}rem`;
 
+  function isValidDate(value: string): boolean {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+  }
+
+  function validate(): boolean {
+    let valid = true;
+    if (!localCompetitionGroup) {
+      setCompetitionGroupError(t('competition_group_required'));
+      valid = false;
+    } else {
+      setCompetitionGroupError('');
+    }
+    if (localCourseId === null) {
+      setCourseError(t('course_required'));
+      valid = false;
+    } else {
+      setCourseError('');
+    }
+    return valid;
+  }
+
   async function handleSave() {
-    if (competitionGroupChanged && localCompetitionGroup) {
-      await onSelectCompetitionGroup(competitor.competitorId, localCompetitionGroup);
+    if (!validate()) return;
+    setSaveError('');
+
+    try {
+      // Update competitor data (gender/dob) if they were missing and now filled in
+      const genderUpdate = genderMissing && localGender ? localGender as 'male' | 'female' : undefined;
+      const dobUpdate = dobMissing && localDob.trim() ? localDob.trim() : undefined;
+      if (genderUpdate || dobUpdate) {
+        await desktopUpdateCompetitorData({
+          competitorId: competitor.competitorId,
+          gender: genderUpdate,
+          dob: dobUpdate,
+        });
+      }
+
+      if (competitionGroupChanged && localCompetitionGroup) {
+        await onSelectCompetitionGroup(competitor.competitorId, localCompetitionGroup);
+      }
+      if (courseChanged) {
+        await onSelectCourse(competitor.competitorId, localCourseId, effectivePaidPriceCents, localPaymentMethod, localCompetitionGroup ?? undefined);
+      } else if (paymentMethodChanged || priceChanged) {
+        await onUpdateRegistrationPayment(competitor.competitorId, effectivePaidPriceCents, localPaymentMethod);
+      }
+      if (localPaymentGroupId) {
+        await onAddPaymentGroupMember(localPaymentGroupId, competitor.competitorId);
+      }
+      onClose();
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : t('failed_save'));
     }
-    if (courseChanged) {
-      await onSelectCourse(competitor.competitorId, localCourseId, effectivePaidPriceCents, localPaymentMethod);
-    } else if (paymentMethodChanged || priceChanged) {
-      await onUpdateRegistrationPayment(competitor.competitorId, effectivePaidPriceCents, localPaymentMethod);
-    }
-    onClose();
   }
 
   async function handleRemoveRegistration() {
@@ -137,23 +233,30 @@ export function CompetitorDetailDialog({
       <DialogTitle>{t('competitor_data')}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
+          {saveError ? <Alert severity="error">{saveError}</Alert> : null}
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
             <DetailRow label={t('first_name')} value={competitor.firstName} fontSize={scaledFontSize} />
             <DetailRow label={t('last_name')} value={competitor.lastName} fontSize={scaledFontSize} />
 
             {genderMissing ? (
-              <FormControl fullWidth size="small">
-                <InputLabel sx={{ fontSize: scaledFontSize }}>{t('gender')}</InputLabel>
-                <Select
-                  value={localGender}
-                  label={t('gender')}
-                  sx={{ fontSize: scaledFontSize }}
-                  onChange={(event) => setLocalGender(event.target.value)}
-                >
-                  <MenuItem value="male">{t('male')}</MenuItem>
-                  <MenuItem value="female">{t('female')}</MenuItem>
-                </Select>
-              </FormControl>
+              <Tooltip title={genderError} open={!!genderError} arrow placement="top">
+                <FormControl fullWidth size="small" error={!!genderError}>
+                  <InputLabel sx={{ fontSize: scaledFontSize }}>{t('gender')}</InputLabel>
+                  <Select
+                    value={localGender}
+                    label={t('gender')}
+                    sx={{ fontSize: scaledFontSize }}
+                    onChange={(event) => {
+                      setLocalGender(event.target.value);
+                      if (genderError) setGenderError('');
+                    }}
+                  >
+                    <MenuItem value="male">{t('male')}</MenuItem>
+                    <MenuItem value="female">{t('female')}</MenuItem>
+                  </Select>
+                  {genderError ? <FormHelperText>{genderError}</FormHelperText> : null}
+                </FormControl>
+              </Tooltip>
             ) : (
               <DetailRow
                 label={t('gender')}
@@ -163,16 +266,23 @@ export function CompetitorDetailDialog({
             )}
 
             {dobMissing ? (
-              <TextField
-                fullWidth
-                size="small"
-                label={t('dob')}
-                value={localDob}
-                onChange={(event) => setLocalDob(event.target.value)}
-                placeholder="YYYY-MM-DD"
-                sx={{ '& input': { fontSize: scaledFontSize } }}
-                slotProps={{ inputLabel: { sx: { fontSize: scaledFontSize } } }}
-              />
+              <Tooltip title={dobError} open={!!dobError} arrow placement="top">
+                <TextField
+                  fullWidth
+                  size="small"
+                  label={t('dob')}
+                  value={localDob}
+                  onChange={(event) => {
+                    setLocalDob(event.target.value);
+                    if (dobError) setDobError('');
+                  }}
+                  placeholder="YYYY-MM-DD"
+                  error={!!dobError}
+                  helperText={dobError}
+                  sx={{ '& input': { fontSize: scaledFontSize } }}
+                  slotProps={{ inputLabel: { sx: { fontSize: scaledFontSize } } }}
+                />
+              </Tooltip>
             ) : (
               <DetailRow label={t('dob')} value={competitor.dob ?? '—'} fontSize={scaledFontSize} />
             )}
@@ -194,8 +304,8 @@ export function CompetitorDetailDialog({
           </Box>
 
           <Box>
-            <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 'bold', fontSize: scaledFontSize }}>
-              {t('competition_group')}
+            <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 'bold', fontSize: scaledFontSize, color: competitionGroupError ? 'error.main' : undefined }}>
+              {t('competition_group')} *
             </Typography>
             <Select
               value={localCompetitionGroup ?? ''}
@@ -203,11 +313,13 @@ export function CompetitorDetailDialog({
               displayEmpty
               fullWidth
               size="small"
+              error={!!competitionGroupError}
               sx={{ fontSize: scaledFontSize }}
               onChange={(event) => {
                 const nextValue = String(event.target.value);
                 if (nextValue) {
                   setLocalCompetitionGroup(nextValue);
+                  if (competitionGroupError) setCompetitionGroupError('');
                 }
               }}
             >
@@ -220,19 +332,21 @@ export function CompetitorDetailDialog({
                 </MenuItem>
               ))}
             </Select>
+            {competitionGroupError ? <Typography variant="caption" color="error">{competitionGroupError}</Typography> : null}
           </Box>
 
           <Box>
-            <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 'bold', fontSize: scaledFontSize }}>
-              {t('course')}
+            <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 'bold', fontSize: scaledFontSize, color: courseError ? 'error.main' : undefined }}>
+              {t('course')} *
             </Typography>
             <ToggleButtonGroup
               exclusive
               value={localCourseId}
-              disabled={courses.length === 0 || submitting || localCompetitionGroup === null || mapPreferredCourseId !== null}
+              disabled={submitting || localCompetitionGroup === null || mapPreferredCourseId !== null}
               sx={{ flexWrap: 'wrap', width: '100%' }}
               onChange={(_, nextValue: string | null) => {
                 setLocalCourseId(nextValue);
+                if (courseError) setCourseError('');
               }}
             >
               {courses.map((course) => (
@@ -248,11 +362,22 @@ export function CompetitorDetailDialog({
                   {courseNameById.get(course.courseId) ?? course.name}
                 </ToggleButton>
               ))}
+              <ToggleButton
+                value={UNDECIDED_COURSE_ID}
+                sx={{
+                  fontSize: scaledFontSize,
+                  lineHeight: 1,
+                  flexGrow: 1,
+                }}
+              >
+                ?
+              </ToggleButton>
             </ToggleButtonGroup>
+            {courseError ? <Typography variant="caption" color="error">{courseError}</Typography> : null}
           </Box>
 
-          {competitor.priceCents !== null ? (
-            <DetailRow label={t('price')} value={formatPrice(competitor.priceCents)} fontSize={scaledFontSize} />
+          {basePriceCents > 0 ? (
+            <DetailRow label={t('price')} value={formatPrice(basePriceCents)} fontSize={scaledFontSize} />
           ) : null}
 
           <Box>
@@ -267,10 +392,13 @@ export function CompetitorDetailDialog({
               onChange={(_, value: PaymentMethod | null) => {
                 if (value) {
                   setLocalPaymentMethod(value);
+                  if (value !== 'other') {
+                    setLocalPaymentGroupId('');
+                  }
                 }
               }}
             >
-              {(['cash', 'prepaid', 'stebby', 'debt', 'other'] as const).map((method) => (
+              {(['cash', 'debt', 'other'] as const).map((method) => (
                 <ToggleButton
                   key={method}
                   value={method}
@@ -281,6 +409,36 @@ export function CompetitorDetailDialog({
               ))}
             </ToggleButtonGroup>
           </Box>
+
+          {localPaymentMethod === 'other' && paymentGroups.length > 0 ? (
+            <Box>
+              <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 'bold', fontSize: scaledFontSize }}>
+                {t('payment_group')}
+              </Typography>
+              {existingPaymentGroupId ? (
+                <Typography sx={{ fontSize: scaledFontSize }}>
+                  {paymentGroups.find((g) => g.paymentGroupId === existingPaymentGroupId)?.name ?? '—'}
+                </Typography>
+              ) : (
+                <Select
+                  value={localPaymentGroupId}
+                  displayEmpty
+                  fullWidth
+                  size="small"
+                  disabled={submitting}
+                  sx={{ fontSize: scaledFontSize }}
+                  onChange={(event) => setLocalPaymentGroupId(event.target.value)}
+                >
+                  <MenuItem value="">—</MenuItem>
+                  {paymentGroups.map((group) => (
+                    <MenuItem key={group.paymentGroupId} value={group.paymentGroupId}>
+                      {group.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              )}
+            </Box>
+          ) : null}
 
           <Box>
             <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 'bold', fontSize: scaledFontSize }}>
@@ -294,14 +452,14 @@ export function CompetitorDetailDialog({
               onChange={(_, value: string | null) => {
                 if (value === 'custom') {
                   setUseCustomPrice(true);
-                  setLocalPaidPriceInput(((competitor.priceCents ?? 0) / 100).toFixed(2));
+                  setLocalPaidPriceInput((basePriceCents / 100).toFixed(2));
                 } else if (value === 'default') {
                   setUseCustomPrice(false);
                 }
               }}
             >
               <ToggleButton value="default" sx={{ fontSize: scaledFontSize, lineHeight: 1, flexGrow: 1 }}>
-                {competitor.priceCents !== null ? formatPrice(competitor.priceCents) : '—'}
+                {formatPrice(basePriceCents)}
               </ToggleButton>
               <ToggleButton value="custom" sx={{ fontSize: scaledFontSize, lineHeight: 1, flexGrow: 1 }}>
                 {t('payment_other')}
@@ -342,7 +500,7 @@ export function CompetitorDetailDialog({
           <Button
             variant="contained"
             onClick={() => void handleSave()}
-            disabled={!hasChanges || submitting}
+            disabled={submitting}
           >
             {t('save')}
           </Button>

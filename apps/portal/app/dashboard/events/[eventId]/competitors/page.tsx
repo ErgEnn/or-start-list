@@ -8,6 +8,7 @@ import { DownloadOutlined } from "@ant-design/icons";
 import * as XLSX from "xlsx";
 import { useT } from "@/lib/i18n-client";
 import { formatEuro } from "@/lib/money";
+import { useSetEventName } from "../event-name-context";
 
 type EventCompetitorRow = {
   registrationId: string;
@@ -22,6 +23,7 @@ type EventCompetitorRow = {
 };
 
 type EventDetailPayload = {
+  event: { name: string };
   competitors: EventCompetitorRow[];
   paymentGroups: Record<string, string[]>;
 };
@@ -35,6 +37,7 @@ export default function EventCompetitorsPage() {
   const [rows, setRows] = useState<EventCompetitorRow[]>([]);
   const [paymentGroupMap, setPaymentGroupMap] = useState<Record<string, string[]>>({});
   const [apiMessage, contextHolder] = message.useMessage();
+  const setEventName = useSetEventName();
 
   async function loadCompetitors() {
     setLoading(true);
@@ -48,6 +51,7 @@ export default function EventCompetitorsPage() {
     const payload = (await response.json()) as EventDetailPayload;
     setRows(payload.competitors);
     setPaymentGroupMap(payload.paymentGroups ?? {});
+    setEventName(payload.event.name);
     setLoading(false);
   }
 

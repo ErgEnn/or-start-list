@@ -1,21 +1,23 @@
 use std::collections::HashMap;
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 
 use crate::database::{
-    claim_reserved_code, clear_registration, conn, create_registration, emit_sync_status, init_schema,
-    load_all_registrations, load_available_reserved_codes, load_competition_groups, load_device_config_map,
-    load_event_state, load_events, load_info_pages, load_map_preferences, load_payment_groups, load_sync_status_from_db, query_competitors,
+    add_payment_group_member, claim_reserved_code, clear_registration, conn, create_registration,
+    emit_sync_status, init_schema, load_all_registrations, load_available_reserved_codes,
+    load_competition_groups, load_device_config_map, load_event_state, load_events, load_info_pages,
+    load_map_preferences, load_payment_groups, load_sync_status_from_db, query_competitors,
     refresh_in_memory_sync_status, reset_competitor_sync_state, save_competition_group_selection,
-    ensure_selected_event_id, update_registration_payment, upsert_device_config_value, AppState,
+    ensure_selected_event_id, update_competitor_data, update_registration_payment, upsert_device_config_value, AppState,
 };
-use crate::si_reader::{self, SiReaderState};
 use crate::models::{
-    AllRegistrationRow, DesktopBootstrapResponse, DesktopClaimReservedCodeRequest, DesktopClearRegistrationRequest,
+    AllRegistrationRow, DesktopAddPaymentGroupMemberRequest, DesktopBootstrapResponse,
+    DesktopClaimReservedCodeRequest, DesktopClearRegistrationRequest,
     DesktopCreateRegistrationRequest, DesktopCreateRegistrationResponse, DesktopEventState,
-    DesktopUpdateRegistrationPaymentRequest,
+    DesktopUpdateCompetitorDataRequest, DesktopUpdateRegistrationPaymentRequest,
     DesktopQueryCompetitorsRequest, DesktopQueryCompetitorsResponse,
-    DesktopSetCompetitionGroupRequest, DesktopSyncStatus, ReservedCodePayload, SELECTED_EVENT_KEY,
+    DesktopSetCompetitionGroupRequest, DesktopSyncStatus, PaymentGroupPayload, ReservedCodePayload,
+    SELECTED_EVENT_KEY,
 };
 
 #[tauri::command]
@@ -72,6 +74,15 @@ pub fn desktop_select_event(state: State<AppState>, event_id: String) -> Result<
     let mut db = conn(&state)?;
     upsert_device_config_value(&mut db, SELECTED_EVENT_KEY, &event_id).map_err(|error| error.to_string())?;
     load_event_state(&mut db, &event_id)
+}
+
+#[tauri::command]
+pub fn desktop_update_competitor_data(
+    state: State<'_, AppState>,
+    request: DesktopUpdateCompetitorDataRequest,
+) -> Result<(), String> {
+    let mut db = conn(&state)?;
+    update_competitor_data(&mut db, request)
 }
 
 #[tauri::command]
@@ -135,6 +146,25 @@ pub async fn desktop_update_registration_payment(
 }
 
 #[tauri::command]
+pub async fn desktop_add_payment_group_member(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: DesktopAddPaymentGroupMemberRequest,
+) -> Result<Vec<PaymentGroupPayload>, String> {
+    let mut db = conn(&state)?;
+    let result = add_payment_group_member(&mut db, request)?;
+    let status = load_sync_status_from_db(&mut db)?;
+    emit_sync_status(&app, status)?;
+    tauri::async_runtime::spawn({
+        let app_handle = app.clone();
+        async move {
+            let _ = crate::sync::run_sync_cycle(&app_handle).await;
+        }
+    });
+    Ok(result)
+}
+
+#[tauri::command]
 pub fn desktop_get_all_registrations(
     state: State<AppState>,
     event_id: String,
@@ -185,49 +215,6 @@ pub async fn desktop_refresh_competitors(app: AppHandle, state: State<'_, AppSta
         reset_competitor_sync_state(&mut db)?;
     }
     crate::sync::run_sync_cycle(&app).await
-}
-
-#[tauri::command]
-pub async fn si_connect(app: AppHandle) -> Result<(), String> {
-    let port_name = si_reader::find_si_port()?;
-
-    {
-        let state = app.state::<SiReaderState>();
-        let already_connected = *state.connected.lock().map_err(|_| "Lock failed".to_string())?;
-        if already_connected {
-            return Err("SI reader already connected".to_string());
-        }
-    }
-
-    // Open port synchronously so errors (e.g. permission denied) are returned to frontend
-    let port = si_reader::open_si_port(&port_name)?;
-
-    {
-        let state = app.state::<SiReaderState>();
-        *state.cancel_flag.lock().map_err(|_| "Lock failed".to_string())? = false;
-        *state.connected.lock().map_err(|_| "Lock failed".to_string())? = true;
-    }
-
-    let app_clone = app.clone();
-    tokio::task::spawn_blocking(move || {
-        si_reader::read_loop(app_clone, port);
-    });
-
-    Ok(())
-}
-
-#[tauri::command]
-pub fn si_disconnect(app: AppHandle) -> Result<(), String> {
-    let state = app.state::<SiReaderState>();
-    *state.cancel_flag.lock().map_err(|_| "Lock failed".to_string())? = true;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn si_get_status(app: AppHandle) -> Result<bool, String> {
-    let state = app.state::<SiReaderState>();
-    let connected = *state.connected.lock().map_err(|_| "Lock failed".to_string())?;
-    Ok(connected)
 }
 
 #[tauri::command]

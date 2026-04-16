@@ -16,7 +16,6 @@ import { TitleBar } from './components/TitleBar';
 import { EventSelectionDialog } from './components/EventSelectionDialog';
 import { useCompetitorDirectory } from './hooks/useCompetitorDirectory';
 import { DEFAULT_TEXT_SCALE, loadDeviceConfig, type DeviceConfig } from './lib/device-config';
-import { onSiCardRead, onSiReaderStatus } from './lib/desktop';
 import { useSiReaderStore } from './stores/siReaderStore';
 import type { DesktopCreateRegistrationResponse } from '@or/shared';
 
@@ -60,6 +59,7 @@ export function App() {
     selectCompetitionGroupForCompetitor,
     selectCourseForCompetitor,
     updateRegistrationPayment,
+    addPaymentGroupMember,
   } = useCompetitorDirectory(deviceConfigRevision);
   const [infoPagesOpen, setInfoPagesOpen] = useState(false);
   const [selectedJumpLetter, setSelectedJumpLetter] = useState<string | null>(null);
@@ -128,25 +128,6 @@ export function App() {
   const siConnected = useSiReaderStore((s) => s.connected);
   const siBufferedCard = useSiReaderStore((s) => s.bufferedCard);
 
-  useEffect(() => {
-    const unlistenCard = onSiCardRead((cardNumber) => {
-      if (useSiReaderStore.getState().bufferedCard !== cardNumber) {
-        useSiReaderStore.getState().setBufferedCard(cardNumber);
-      }
-    });
-    const unlistenStatus = onSiReaderStatus((status) => {
-      useSiReaderStore.getState().setConnected(status.connected);
-      if (status.error) {
-        useSiReaderStore.getState().setError(status.error);
-      }
-    });
-
-    return () => {
-      void unlistenCard.then((fn) => fn());
-      void unlistenStatus.then((fn) => fn());
-    };
-  }, []);
-
   const [jumpScrollToken, setJumpScrollToken] = useState(0);
   const scrollTarget = useMemo(
     () =>
@@ -163,10 +144,9 @@ export function App() {
   function handleRecentRegistrationClick(competitorId: string) {
     setSelectedFilter(ALL_FILTER_ID);
     setSelectedJumpLetter(null);
-    setFocusedCompetitor({
-      competitorId,
-      token: Date.now(),
-    });
+    const token = Date.now();
+    setFocusedCompetitor({ competitorId, token });
+    setOpenCompetitorId({ competitorId, token });
   }
 
   function handleOpenCompetitorFromRegistrations(competitorId: string) {
@@ -243,7 +223,6 @@ export function App() {
         <AddCompetitorButton
           courses={courses}
           competitionGroups={competitionGroups}
-          mapPreferences={mapPreferences}
           selectedEventId={selectedEventId}
           onClaimed={handleCompetitorClaimed}
         />
@@ -285,6 +264,7 @@ export function App() {
             onSelectCompetitionGroup={selectCompetitionGroupForCompetitor}
             onSelectCourse={selectCourseForCompetitor}
             onUpdateRegistrationPayment={updateRegistrationPayment}
+            onAddPaymentGroupMember={addPaymentGroupMember}
             openCompetitorId={openCompetitorId}
           />
         </Box>

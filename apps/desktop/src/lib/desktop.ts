@@ -10,7 +10,9 @@ import {
   desktopQueryCompetitorsResponseSchema,
   desktopSetCompetitionGroupRequestSchema,
   desktopSyncStatusSchema,
+  paymentGroupSchema,
   reservedCodeSchema,
+  type DesktopAddPaymentGroupMemberRequest,
   type DesktopBootstrap,
   type DesktopClaimReservedCodeRequest,
   type DesktopClearRegistrationRequest,
@@ -23,7 +25,9 @@ import {
   type DesktopSetCompetitionGroupRequest,
   type DesktopSyncStatus,
   type AllRegistrationRow,
+  type DesktopUpdateCompetitorDataRequest,
   type DesktopUpdateRegistrationPaymentRequest,
+  type PaymentGroup,
   type ReservedCode,
 } from "@or/shared";
 
@@ -69,6 +73,12 @@ export async function desktopUpdateRegistrationPayment(
   );
 }
 
+export async function desktopUpdateCompetitorData(
+  request: DesktopUpdateCompetitorDataRequest,
+): Promise<void> {
+  await invoke("desktop_update_competitor_data", { request });
+}
+
 export async function desktopSetCompetitionGroup(
   request: DesktopSetCompetitionGroupRequest,
 ): Promise<void> {
@@ -85,6 +95,14 @@ export async function desktopClaimReservedCode(
 ): Promise<DesktopCreateRegistrationResponse> {
   return desktopCreateRegistrationResponseSchema.parse(
     await invoke("desktop_claim_reserved_code", { request }),
+  );
+}
+
+export async function desktopAddPaymentGroupMember(
+  request: DesktopAddPaymentGroupMemberRequest,
+): Promise<PaymentGroup[]> {
+  return z.array(paymentGroupSchema).parse(
+    await invoke("desktop_add_payment_group_member", { request }),
   );
 }
 
@@ -114,37 +132,3 @@ export async function onDesktopSyncStatus(
   });
 }
 
-// SI Reader
-
-const SI_CARD_READ_EVENT = "desktop://si-card-read";
-const SI_READER_STATUS_EVENT = "desktop://si-reader-status";
-
-export async function siConnect(): Promise<void> {
-  await invoke("si_connect");
-}
-
-export async function siDisconnect(): Promise<void> {
-  await invoke("si_disconnect");
-}
-
-export async function siGetStatus(): Promise<boolean> {
-  return (await invoke("si_get_status")) as boolean;
-}
-
-export type SiReaderStatus = { connected: boolean; error?: string };
-
-export async function onSiCardRead(
-  callback: (cardNumber: number) => void,
-): Promise<UnlistenFn> {
-  return listen<{ cardNumber: number }>(SI_CARD_READ_EVENT, (event) => {
-    callback(event.payload.cardNumber);
-  });
-}
-
-export async function onSiReaderStatus(
-  callback: (status: SiReaderStatus) => void,
-): Promise<UnlistenFn> {
-  return listen<SiReaderStatus>(SI_READER_STATUS_EVENT, (event) => {
-    callback(event.payload);
-  });
-}

@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import {
   Alert,
-  Autocomplete,
   Box,
   Button,
-  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -21,78 +19,25 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import type {
-  CompetitionGroup,
-  Course,
-  DesktopCreateRegistrationResponse,
-  MapPreferenceMember,
-  ReservedCode,
+import {
+  UNDECIDED_COURSE_ID,
+  type CompetitionGroup,
+  type Course,
+  type DesktopCreateRegistrationResponse,
 } from "@or/shared";
-import { desktopGetReservedCodes, desktopClaimReservedCode } from "../lib/desktop";
+import { desktopClaimReservedCode } from "../lib/desktop";
 import { t } from "../i18n";
-import { type ModalLang, modalT } from "./addCompetitorTranslations";
-
-const ESTONIAN_COUNTIES = [
-  "Harju maakond",
-  "Hiiu maakond",
-  "Ida-Viru maakond",
-  "Jõgeva maakond",
-  "Järva maakond",
-  "Lääne maakond",
-  "Lääne-Viru maakond",
-  "Põlva maakond",
-  "Pärnu maakond",
-  "Rapla maakond",
-  "Saare maakond",
-  "Tartu maakond",
-  "Valga maakond",
-  "Viljandi maakond",
-  "Võru maakond",
-];
 
 type AddCompetitorButtonProps = {
   courses: Course[];
   competitionGroups: CompetitionGroup[];
-  mapPreferences: MapPreferenceMember[];
   selectedEventId: string;
   onClaimed: (response: DesktopCreateRegistrationResponse) => void;
 };
 
-function parseBirthYear(dob: string): number | null {
-  const match = /^(\d{4})/.exec(dob);
-  return match ? Number.parseInt(match[1], 10) : null;
-}
-
-function getEligibleGroups(
-  gender: string,
-  dob: string,
-  competitionGroups: CompetitionGroup[],
-): CompetitionGroup[] {
-  const birthYear = parseBirthYear(dob);
-
-  return competitionGroups.filter((group) => {
-    // Gender filter: skip groups whose gender doesn't match
-    if (gender && group.gender && group.gender !== gender) {
-      return false;
-    }
-    // Birth year filter: skip groups whose year range doesn't match
-    if (birthYear != null) {
-      if (group.minYear != null && birthYear < group.minYear) return false;
-      if (group.maxYear != null && birthYear > group.maxYear) return false;
-    }
-    return true;
-  });
-}
-
-function isValidDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-  return (
-    date.getFullYear() === year &&
-    date.getMonth() === month - 1 &&
-    date.getDate() === day
-  );
+const birthYearOptions: number[] = [];
+for (let y = new Date().getFullYear(); y >= 1900; y--) {
+  birthYearOptions.push(y);
 }
 
 function formatPrice(cents: number): string {
@@ -102,51 +47,27 @@ function formatPrice(cents: number): string {
 export function AddCompetitorButton({
   courses,
   competitionGroups,
-  mapPreferences: _mapPreferences,
   selectedEventId,
   onClaimed,
 }: AddCompetitorButtonProps) {
   const [open, setOpen] = useState(false);
-  const [reservedCodes, setReservedCodes] = useState<ReservedCode[]>([]);
-  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const [selectedCode, setSelectedCode] = useState("");
-  const [manualEol, setManualEol] = useState("");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [gender, setGender] = useState("");
-  const [dob, setDob] = useState("");
-  const [dobError, setDobError] = useState("");
-  const [club, setClub] = useState("");
-  const [siCard, setSiCard] = useState("");
-  const [county, setCounty] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
-  const [language, setLanguage] = useState<ModalLang>("et");
+  const [eolCode, setEolCode] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [gender, setGender] = useState<"male" | "female" | "">("");
   const [courseId, setCourseId] = useState("");
   const [competitionGroupName, setCompetitionGroupName] = useState("");
+  const [competitionGroupError, setCompetitionGroupError] = useState("");
+  const [courseError, setCourseError] = useState("");
 
-  const usingManualEol = manualEol.trim().length > 0;
-  const effectiveCode = usingManualEol ? manualEol.trim() : selectedCode;
+  const parsedBirthYear = /^\d{4}$/.test(birthYear.trim())
+    ? Number.parseInt(birthYear.trim(), 10)
+    : null;
 
-  // Show all groups, but compute eligible ones for auto-selection
-  const eligibleGroups = useMemo(
-    () => getEligibleGroups(gender, dob, competitionGroups),
-    [gender, dob, competitionGroups],
-  );
-
-  const selectedGroupPrice = useMemo(() => {
-    const group = competitionGroups.find((g) => g.name === competitionGroupName);
-    return group?.priceCents ?? null;
-  }, [competitionGroupName, competitionGroups]);
-
-  // Auto-select first eligible group when eligibility changes
-  useEffect(() => {
-    if (eligibleGroups.length > 0 && !eligibleGroups.some((g) => g.name === competitionGroupName)) {
-      setCompetitionGroupName(eligibleGroups[0].name);
-    }
-  }, [eligibleGroups, competitionGroupName]);
+  const selectedGroup = competitionGroups.find((g) => g.name === competitionGroupName);
+  const selectedGroupPrice = selectedGroup?.priceCents ?? null;
 
   // Auto-select first course if only one
   useEffect(() => {
@@ -155,54 +76,15 @@ export function AddCompetitorButton({
     }
   }, [courses, courseId]);
 
-  useEffect(() => {
-    if (!open) return;
-
-    let cancelled = false;
-
-    async function loadCodes() {
-      setLoading(true);
-      setError("");
-      try {
-        const codes = await desktopGetReservedCodes();
-        if (!cancelled) {
-          setReservedCodes(codes);
-          if (codes.length > 0) {
-            setSelectedCode(codes[0].code);
-          }
-        }
-      } catch (loadError) {
-        if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : t("failed_load_reserved_codes"));
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    void loadCodes();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
-
   function resetForm() {
-    setSelectedCode("");
-    setManualEol("");
-    setFirstName("");
-    setLastName("");
+    setEolCode("");
+    setBirthYear("");
     setGender("");
-    setDob("");
-    setDobError("");
-    setClub("");
-    setSiCard("");
-    setCounty(null);
-    setEmail("");
     setCourseId("");
     setCompetitionGroupName("");
     setError("");
-    // language is intentionally NOT reset — persists across opens
+    setCompetitionGroupError("");
+    setCourseError("");
   }
 
   function handleClose() {
@@ -210,37 +92,33 @@ export function AddCompetitorButton({
     resetForm();
   }
 
-  function handleDobBlur() {
-    if (!dob.trim()) {
-      setDobError("");
-      return;
-    }
-    if (!isValidDate(dob.trim())) {
-      setDobError(modalT(language, "invalid_date"));
-    } else {
-      setDobError("");
-    }
-  }
-
   async function handleSave() {
+    let valid = true;
+    if (!competitionGroupName) {
+      setCompetitionGroupError(t("competition_group_required"));
+      valid = false;
+    } else {
+      setCompetitionGroupError("");
+    }
+    if (!courseId) {
+      setCourseError(t("course_required"));
+      valid = false;
+    } else {
+      setCourseError("");
+    }
+    if (!valid) return;
+
     setSaving(true);
     setError("");
 
     try {
       const response = await desktopClaimReservedCode({
-        code: effectiveCode,
+        eolCode: eolCode.trim(),
         eventId: selectedEventId,
         courseId,
         competitionGroupName: competitionGroupName || undefined,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        gender: gender as "male" | "female",
-        dob,
-        club: club.trim() || undefined,
-        siCard: siCard.trim() || undefined,
-        county: county || undefined,
-        email: email.trim() || undefined,
-        isManualEol: usingManualEol || undefined,
+        birthYear: parsedBirthYear ?? undefined,
+        gender: gender || undefined,
       });
       setOpen(false);
       resetForm();
@@ -252,229 +130,137 @@ export function AddCompetitorButton({
     }
   }
 
-  const canSave =
-    effectiveCode &&
-    firstName.trim() &&
-    lastName.trim() &&
-    gender &&
-    dob &&
-    !dobError &&
-    courseId &&
-    !saving &&
-    !loading;
-
-  const mt = (key: string) => modalT(language, key);
-  const et = (key: string) => modalT("et", key);
-
   return (
     <>
       <Button aria-label={t("add_competitor")} variant="outlined" onClick={() => setOpen(true)}>
         <PersonAddIcon />
       </Button>
       <Dialog open={open} onClose={saving ? undefined : handleClose} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          {mt("add_new_competitor")}
-          <ToggleButtonGroup
-            exclusive
-            size="small"
-            value={language}
-            onChange={(_, v: ModalLang | null) => {
-              if (v) setLanguage(v);
-            }}
-          >
-            <ToggleButton value="et" sx={{ px: 1, py: 0.25, fontSize: "0.75rem" }}>
-              ET
-            </ToggleButton>
-            <ToggleButton value="en" sx={{ px: 1, py: 0.25, fontSize: "0.75rem" }}>
-              EN
-            </ToggleButton>
-            <ToggleButton value="fi" sx={{ px: 1, py: 0.25, fontSize: "0.75rem" }}>
-              FI
-            </ToggleButton>
-            <ToggleButton value="lv" sx={{ px: 1, py: 0.25, fontSize: "0.75rem" }}>
-              LV
-            </ToggleButton>
-            <ToggleButton value="ru" sx={{ px: 1, py: 0.25, fontSize: "0.75rem" }}>
-              RU
-            </ToggleButton>
-          </ToggleButtonGroup>
-        </DialogTitle>
+        <DialogTitle>Lisa uus võistleja</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             {error ? <Alert severity="error">{error}</Alert> : null}
-            {loading ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                <CircularProgress size={28} />
+
+            <TextField
+              fullWidth
+              required
+              autoFocus
+              label="EOL kood"
+              value={eolCode}
+              onChange={(e) => setEolCode(e.target.value)}
+            />
+
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <FormControl sx={{ flex: 1 }}>
+                <InputLabel>Sünniaasta</InputLabel>
+                <Select
+                  value={birthYear}
+                  label="Sünniaasta"
+                  onChange={(e) => setBirthYear(e.target.value)}
+                >
+                  <MenuItem value="">—</MenuItem>
+                  {birthYearOptions.map((year) => (
+                    <MenuItem key={year} value={String(year)}>{year}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <Box sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
+                <Typography variant="body2" sx={{ mb: 0.5, color: "text.secondary" }}>
+                  Sugu
+                </Typography>
+                <ToggleButtonGroup
+                  exclusive
+                  value={gender}
+                  onChange={(_, v: "male" | "female" | null) => {
+                    if (v) setGender(v);
+                  }}
+                  sx={{ flex: 1 }}
+                >
+                  <ToggleButton value="male" sx={{ flex: 1 }}>
+                    Mees
+                  </ToggleButton>
+                  <ToggleButton value="female" sx={{ flex: 1 }}>
+                    Naine
+                  </ToggleButton>
+                </ToggleButtonGroup>
               </Box>
-            ) : (
-              <>
-                <Typography variant="subtitle2">{mt("competitor_data")}</Typography>
+            </Box>
 
-                {/* Reserved code dropdown OR manual EOL text input */}
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <FormControl sx={{ flex: 1 }} disabled={usingManualEol}>
-                    <InputLabel>{mt("reserved_code")}</InputLabel>
-                    <Select
-                      value={usingManualEol ? "" : selectedCode}
-                      label={mt("reserved_code")}
-                      onChange={(e) => setSelectedCode(e.target.value)}
-                    >
-                      {reservedCodes.map((rc) => (
-                        <MenuItem key={rc.code} value={rc.code}>
-                          {rc.code}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                  <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                    {mt("or")}
-                  </Typography>
-                  <TextField
-                    sx={{ flex: 1 }}
-                    label={mt("manual_eol")}
-                    value={manualEol}
-                    onChange={(e) => setManualEol(e.target.value)}
-                  />
-                </Box>
+            <Divider />
 
-                {/* First name + last name on same row */}
-                <Box sx={{ display: "flex", gap: 1 }}>
-                  <TextField
-                    sx={{ flex: 1 }}
-                    required
-                    label={mt("first_name")}
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                  />
-                  <TextField
-                    sx={{ flex: 1 }}
-                    required
-                    label={mt("last_name")}
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                  />
-                </Box>
+            {/* Competition group */}
+            <FormControl fullWidth required error={!!competitionGroupError}>
+              <InputLabel>Võistlusgrupp</InputLabel>
+              <Select
+                value={competitionGroupName}
+                label="Võistlusgrupp"
+                onChange={(e) => {
+                  setCompetitionGroupName(e.target.value);
+                  if (competitionGroupError) setCompetitionGroupError("");
+                }}
+              >
+                <MenuItem value="">—</MenuItem>
+                {competitionGroups.map((group) => (
+                  <MenuItem key={group.name} value={group.name}>
+                    {group.name}
+                  </MenuItem>
+                ))}
+              </Select>
+              {competitionGroupError ? <Typography variant="caption" color="error">{competitionGroupError}</Typography> : null}
+            </FormControl>
 
-                <Box sx={{ display: "flex", gap: 1 }}>
-                  <TextField
-                    sx={{ flex: 1 }}
-                    required
-                    label={mt("dob")}
-                    value={dob}
-                    onChange={(e) => {
-                      setDob(e.target.value);
-                      if (dobError) setDobError("");
-                    }}
-                    onBlur={handleDobBlur}
-                    placeholder={mt("dob_placeholder")}
-                    error={!!dobError}
-                    helperText={dobError}
-                  />
-                  <FormControl sx={{ flex: 1 }} required>
-                    <InputLabel>{mt("gender")}</InputLabel>
-                    <Select
-                      value={gender}
-                      label={mt("gender")}
-                      onChange={(e) => setGender(e.target.value)}
-                    >
-                      <MenuItem value="male">{mt("male")}</MenuItem>
-                      <MenuItem value="female">{mt("female")}</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
-
-                <TextField
-                  fullWidth
-                  label={mt("si_code")}
-                  value={siCard}
-                  onChange={(e) => setSiCard(e.target.value)}
-                />
-                <TextField
-                  fullWidth
-                  label={mt("school_workplace")}
-                  value={club}
-                  onChange={(e) => setClub(e.target.value)}
-                />
-                <Autocomplete
-                  value={county}
-                  onChange={(_, value) => setCounty(value)}
-                  options={[...ESTONIAN_COUNTIES, mt("non_resident")]}
-                  renderInput={(params) => (
-                    <TextField {...params} label={mt("county")} />
-                  )}
-                />
-                <TextField
-                  fullWidth
-                  label={mt("email")}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  type="email"
-                />
-
-                <Divider />
-                <Typography variant="subtitle2">{et("registration")}</Typography>
-
-                {/* Competition group — optional, shows all groups */}
-                <FormControl fullWidth>
-                  <InputLabel>{et("competition_group")}</InputLabel>
-                  <Select
-                    value={competitionGroupName}
-                    label={et("competition_group")}
-                    onChange={(e) => setCompetitionGroupName(e.target.value)}
-                  >
-                    <MenuItem value="">—</MenuItem>
-                    {competitionGroups.map((group) => (
-                      <MenuItem key={group.name} value={group.name}>
-                        {group.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                {selectedGroupPrice != null && (
-                  <Typography>
-                    {et("price")}: {formatPrice(selectedGroupPrice)}
-                  </Typography>
-                )}
-
-                {/* Course as ToggleButtonGroup */}
-                <Box>
-                  <Typography variant="body2" sx={{ mb: 0.5, color: "text.secondary" }}>
-                    {et("course")} *
-                  </Typography>
-                  <ToggleButtonGroup
-                    exclusive
-                    value={courseId}
-                    onChange={(_, value: string | null) => {
-                      if (value !== null) setCourseId(value);
-                    }}
-                    sx={{ flexWrap: "wrap", width: "100%" }}
-                  >
-                    {courses.map((course) => (
-                      <ToggleButton
-                        key={course.courseId}
-                        value={course.courseId}
-                        sx={{ flexGrow: 1, lineHeight: 1 }}
-                      >
-                        {course.name}
-                      </ToggleButton>
-                    ))}
-                  </ToggleButtonGroup>
-                </Box>
-              </>
+            {selectedGroupPrice != null && (
+              <Typography>
+                Hind: {formatPrice(selectedGroupPrice)}
+              </Typography>
             )}
+
+            {/* Course */}
+            <Box>
+              <Typography variant="body2" sx={{ mb: 0.5, color: courseError ? "error.main" : "text.secondary" }}>
+                Rada *
+              </Typography>
+              <ToggleButtonGroup
+                exclusive
+                value={courseId}
+                onChange={(_, value: string | null) => {
+                  if (value !== null) {
+                    setCourseId(value);
+                    if (courseError) setCourseError("");
+                  }
+                }}
+                sx={{ flexWrap: "wrap", width: "100%" }}
+              >
+                {courses.map((course) => (
+                  <ToggleButton
+                    key={course.courseId}
+                    value={course.courseId}
+                    sx={{ flexGrow: 1, lineHeight: 1 }}
+                  >
+                    {course.name}
+                  </ToggleButton>
+                ))}
+                <ToggleButton
+                  value={UNDECIDED_COURSE_ID}
+                  sx={{ flexGrow: 1, lineHeight: 1 }}
+                >
+                  ?
+                </ToggleButton>
+              </ToggleButtonGroup>
+              {courseError ? <Typography variant="caption" color="error">{courseError}</Typography> : null}
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} disabled={saving}>
-            {et("cancel")}
+            Loobu
           </Button>
           <Button
             variant="contained"
             onClick={() => void handleSave()}
-            disabled={!canSave}
+            disabled={saving}
           >
-            {et("save")}
+            Salvesta
           </Button>
         </DialogActions>
       </Dialog>

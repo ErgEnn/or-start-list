@@ -12,6 +12,7 @@ import type {
   SelectedRegistrationInfo,
 } from "@or/shared";
 import {
+  desktopAddPaymentGroupMember,
   desktopBootstrap,
   desktopClearRegistration,
   desktopCreateRegistration,
@@ -52,8 +53,9 @@ type UseCompetitorDirectoryResult = {
   selectedRegistrationsByCompetitor: Record<string, SelectedRegistrationInfo>;
   submittingCompetitorIds: Set<string>;
   selectCompetitionGroupForCompetitor: (competitorId: string, competitionGroupName: string) => Promise<void>;
-  selectCourseForCompetitor: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod) => Promise<void>;
+  selectCourseForCompetitor: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod, competitionGroupName?: string) => Promise<void>;
   updateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: PaymentMethod) => Promise<void>;
+  addPaymentGroupMember: (paymentGroupId: string, competitorId: string) => Promise<void>;
 };
 
 const EMPTY_SYNC_STATUS: DesktopSyncStatus = {
@@ -158,7 +160,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     }
   }, [refreshQuery]);
 
-  const selectCourseForCompetitor = useCallback(async (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod) => {
+  const selectCourseForCompetitor = useCallback(async (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod, competitionGroupName?: string) => {
     const currentEventId = latestSelectedEventIdRef.current;
     if (!currentEventId) {
       return;
@@ -185,13 +187,13 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     latestCourseSelectionRequestIdsRef.current.set(competitorId, requestId);
 
     try {
-      const selectedCompetitionGroupName = latestRowsRef.current.find((row) => row.competitorId === competitorId)?.selectedCompetitionGroupName;
+      const resolvedCompetitionGroupName = competitionGroupName ?? latestRowsRef.current.find((row) => row.competitorId === competitorId)?.selectedCompetitionGroupName ?? "";
       const response = courseId
         ? await desktopCreateRegistration({
             eventId: currentEventId,
             competitorId,
             courseId,
-            competitionGroupName: selectedCompetitionGroupName ?? "",
+            competitionGroupName: resolvedCompetitionGroupName,
             paidPriceCents: paidPriceCents ?? 0,
             paymentMethod: paymentMethod ?? "cash",
           })
@@ -283,6 +285,16 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
         next.delete(competitorId);
         return next;
       });
+    }
+  }, []);
+
+  const addPaymentGroupMember = useCallback(async (paymentGroupId: string, competitorId: string) => {
+    setError("");
+    try {
+      const updatedGroups = await desktopAddPaymentGroupMember({ paymentGroupId, competitorId });
+      setPaymentGroups(updatedGroups);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : t('failed_save'));
     }
   }, []);
 
@@ -481,6 +493,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     selectCompetitionGroupForCompetitor,
     selectCourseForCompetitor,
     updateRegistrationPayment,
+    addPaymentGroupMember,
   };
 }
 

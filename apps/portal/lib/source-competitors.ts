@@ -7,7 +7,7 @@ import { auditLog, sourceCompetitors } from "@/lib/db/schema";
 
 type UnknownMap = Record<string, unknown>;
 type TextLike = string | number | boolean;
-const DB_BATCH_SIZE = 1000;
+export const DB_BATCH_SIZE = 1000;
 
 type EolTextNode = { "#text"?: TextLike };
 type EolPersonName = {
@@ -52,7 +52,7 @@ export type SourceCompetitorRow = {
   siCard?: string;
 };
 
-type SourceCompetitorImportTrigger = "manual" | "scheduled";
+export type SourceCompetitorImportTrigger = "manual" | "scheduled";
 type SourceCompetitorImportPayload = {
   importedCount: number;
   changedCount: number;
@@ -106,7 +106,7 @@ function asArray<T>(value: T | T[] | undefined): T[] {
   return Array.isArray(value) ? value : [value];
 }
 
-function chunked<T>(items: T[], size: number): T[][] {
+export function chunked<T>(items: T[], size: number): T[][] {
   if (items.length === 0) {
     return [];
   }
@@ -118,7 +118,7 @@ function chunked<T>(items: T[], size: number): T[][] {
   return chunks;
 }
 
-function normalizeDob(value: string | undefined): string | undefined {
+export function normalizeDob(value: string | undefined): string | undefined {
   if (!value) {
     return undefined;
   }
@@ -148,7 +148,7 @@ function normalizeDob(value: string | undefined): string | undefined {
   return value;
 }
 
-function normalizeGender(value: string | undefined): "male" | "female" | undefined {
+export function normalizeGender(value: string | undefined): "male" | "female" | undefined {
   if (!value) {
     return undefined;
   }
@@ -158,6 +158,7 @@ function normalizeGender(value: string | undefined): "male" | "female" | undefin
     case "male":
     case "man":
       return "male";
+    case "n": // "naine" (Estonian for woman)
     case "f":
     case "female":
     case "woman":

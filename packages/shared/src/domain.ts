@@ -3,8 +3,8 @@ import { z } from "zod";
 export const competitorSchema = z.object({
   competitorId: z.string().min(1),
   eolNumber: z.string().min(1),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
+  firstName: z.string(),
+  lastName: z.string(),
   gender: z.enum(["male", "female"]).nullable().optional(),
   dob: z.string().optional(),
   club: z.string().optional(),
@@ -113,8 +113,8 @@ export const reservedCodeClaimedPayloadSchema = z.object({
   code: z.string().min(1),
   competitorId: z.string().min(1),
   eolNumber: z.string().min(1),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
+  firstName: z.string().nullable().optional(),
+  lastName: z.string().nullable().optional(),
   gender: z.enum(["male", "female"]).nullable().optional(),
   dob: z.string().nullable().optional(),
   club: z.string().nullable().optional(),
@@ -122,6 +122,7 @@ export const reservedCodeClaimedPayloadSchema = z.object({
   county: z.string().nullable().optional(),
   email: z.string().nullable().optional(),
   isManualEol: z.boolean().optional(),
+  birthYear: z.number().int().nullable().optional(),
 });
 
 export const infoPageSchema = z.object({
@@ -138,6 +139,8 @@ export const syncStateSchema = z.object({
   lastPushedSeqAck: z.number().int().nonnegative(),
   lastCompetitorRowVersion: z.number().int().nonnegative().default(0),
 });
+
+export const UNDECIDED_COURSE_ID = "?";
 
 export type Competitor = z.infer<typeof competitorSchema>;
 export type EventClass = z.infer<typeof classSchema>;

@@ -1,7 +1,6 @@
 mod commands;
 mod database;
 mod models;
-mod si_reader;
 mod sync;
 
 use std::{fs::OpenOptions, path::PathBuf};
@@ -30,7 +29,7 @@ fn init_file_logger(log_file: PathBuf) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(AppState::default())
-        .manage(si_reader::SiReaderState::default())
+        .plugin(tauri_plugin_serialplugin::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
             std::fs::create_dir_all(&data_dir).map_err(|error| error.to_string())?;
@@ -78,19 +77,18 @@ pub fn run() {
             commands::desktop_bootstrap,
             commands::desktop_query_competitors,
             commands::desktop_select_event,
+            commands::desktop_update_competitor_data,
             commands::desktop_set_competition_group,
             commands::desktop_create_registration,
             commands::desktop_clear_registration,
             commands::desktop_update_registration_payment,
+            commands::desktop_add_payment_group_member,
             commands::desktop_get_all_registrations,
             commands::desktop_get_sync_status,
             commands::desktop_get_reserved_codes,
             commands::desktop_claim_reserved_code,
             commands::desktop_force_sync,
             commands::desktop_refresh_competitors,
-            commands::si_connect,
-            commands::si_disconnect,
-            commands::si_get_status,
             commands::open_external_url,
         ])
         .run(tauri::generate_context!())

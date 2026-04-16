@@ -5,8 +5,9 @@ import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
 import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useT } from "@/lib/i18n-client";
+import { EventNameContext } from "./event-name-context";
 
 export default function EventDetailLayout({ children }: { children: ReactNode }) {
   const t = useT();
@@ -15,19 +16,6 @@ export default function EventDetailLayout({ children }: { children: ReactNode })
   const eventId = params.eventId;
   const base = `/dashboard/events/${encodeURIComponent(eventId)}`;
   const [eventName, setEventName] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function load() {
-      const response = await fetch(`/api/admin/events/${encodeURIComponent(eventId)}`, {
-        cache: "no-store",
-      });
-      if (response.ok) {
-        const payload = (await response.json()) as { event: { name: string } };
-        setEventName(payload.event.name);
-      }
-    }
-    load();
-  }, [eventId]);
 
   let activeKey = "basic";
   if (pathname.endsWith("/courses")) {
@@ -63,7 +51,9 @@ export default function EventDetailLayout({ children }: { children: ReactNode })
           />
         </Space>
       </Card>
-      {children}
+      <EventNameContext.Provider value={setEventName}>
+        {children}
+      </EventNameContext.Provider>
     </Space>
   );
 }

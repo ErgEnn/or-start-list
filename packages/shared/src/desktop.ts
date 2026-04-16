@@ -109,26 +109,30 @@ export const desktopUpdateRegistrationPaymentRequestSchema = z.object({
   paymentMethod: paymentMethodSchema,
 });
 
+export const desktopUpdateCompetitorDataRequestSchema = z.object({
+  competitorId: z.string().min(1),
+  gender: z.enum(["male", "female"]).optional(),
+  dob: z.string().optional(),
+});
+
 export const desktopSetCompetitionGroupRequestSchema = z.object({
   eventId: z.string().min(1),
   competitorId: z.string().min(1),
   competitionGroupName: z.string().min(1),
 });
 
+export const desktopAddPaymentGroupMemberRequestSchema = z.object({
+  paymentGroupId: z.string().min(1),
+  competitorId: z.string().min(1),
+});
+
 export const desktopClaimReservedCodeRequestSchema = z.object({
-  code: z.string().min(1),
+  eolCode: z.string().min(1),
   eventId: z.string().min(1),
   courseId: z.string().min(1),
   competitionGroupName: z.string().optional(),
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  gender: z.enum(["male", "female"]),
-  dob: z.string().min(1),
-  club: z.string().optional(),
-  siCard: z.string().optional(),
-  county: z.string().optional(),
-  email: z.string().optional(),
-  isManualEol: z.boolean().optional(),
+  birthYear: z.number().int().optional(),
+  gender: z.enum(["male", "female"]).optional(),
 });
 
 export const deviceSyncCycleRequestSchema = z.object({
@@ -165,7 +169,9 @@ export type DesktopCreateRegistrationResponse = z.infer<typeof desktopCreateRegi
 export type DesktopClearRegistrationRequest = z.infer<typeof desktopClearRegistrationRequestSchema>;
 export type DesktopClearRegistrationResponse = z.infer<typeof desktopClearRegistrationResponseSchema>;
 export type DesktopUpdateRegistrationPaymentRequest = z.infer<typeof desktopUpdateRegistrationPaymentRequestSchema>;
+export type DesktopUpdateCompetitorDataRequest = z.infer<typeof desktopUpdateCompetitorDataRequestSchema>;
 export type DesktopSetCompetitionGroupRequest = z.infer<typeof desktopSetCompetitionGroupRequestSchema>;
+export type DesktopAddPaymentGroupMemberRequest = z.infer<typeof desktopAddPaymentGroupMemberRequestSchema>;
 export type DesktopClaimReservedCodeRequest = z.infer<typeof desktopClaimReservedCodeRequestSchema>;
 export type DeviceSyncCycleRequest = z.infer<typeof deviceSyncCycleRequestSchema>;
 export type DeviceSyncCycleResponse = z.infer<typeof deviceSyncCycleResponseSchema>;

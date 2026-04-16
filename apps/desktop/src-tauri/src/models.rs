@@ -367,6 +367,14 @@ pub struct DesktopSetCompetitionGroupRequest {
     pub competition_group_name: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DesktopUpdateCompetitorDataRequest {
+    pub competitor_id: String,
+    pub gender: Option<String>,
+    pub dob: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, QueryableByName)]
 #[serde(rename_all = "camelCase")]
 pub struct ReservedCodeRow {
@@ -385,20 +393,27 @@ pub struct ReservedCodePayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct DesktopAddPaymentGroupMemberRequest {
+    pub payment_group_id: String,
+    pub competitor_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentGroupMemberAddedPayload {
+    pub payment_group_id: String,
+    pub competitor_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DesktopClaimReservedCodeRequest {
-    pub code: String,
+    pub eol_code: String,
     pub event_id: String,
     pub course_id: String,
     pub competition_group_name: Option<String>,
-    pub first_name: String,
-    pub last_name: String,
-    pub gender: String,
-    pub dob: String,
-    pub club: Option<String>,
-    pub si_card: Option<String>,
-    pub county: Option<String>,
-    pub email: Option<String>,
-    pub is_manual_eol: Option<bool>,
+    pub birth_year: Option<i32>,
+    pub gender: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -407,8 +422,8 @@ pub struct ReservedCodeClaimedPayload {
     pub code: String,
     pub competitor_id: String,
     pub eol_number: String,
-    pub first_name: String,
-    pub last_name: String,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
     pub gender: Option<String>,
     pub dob: Option<String>,
     pub club: Option<String>,
@@ -416,6 +431,7 @@ pub struct ReservedCodeClaimedPayload {
     pub county: Option<String>,
     pub email: Option<String>,
     pub is_manual_eol: Option<bool>,
+    pub birth_year: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

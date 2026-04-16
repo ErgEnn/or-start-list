@@ -62,12 +62,15 @@ const translations: Record<string, string> = {
   dob: 'Sünniaeg',
   club: 'Klubi',
   competition_group: 'Võistlusgrupp',
+  competition_group_required: 'Võistlusgrupp on kohustuslik',
+  course_required: 'Rada on kohustuslik',
   no_reserved_codes: 'Reserveeritud koode pole saadaval.',
   failed_load_reserved_codes: 'Reserveeritud koodide laadimine ebaõnnestus.',
   failed_claim_reserved_code: 'Reserveeritud koodi hõivamine ebaõnnestus.',
   remove_registration: 'Eemalda registreerimine',
   registration: 'Registreerimine',
   competitor_data: 'Võistleja andmed',
+  payment_group: 'Maksegrupp',
   payment_method: 'Makseviis',
   payment_cash: 'Sularaha',
   payment_prepaid: 'Ettemaks',
@@ -97,6 +100,10 @@ const translations: Record<string, string> = {
   si_reader: 'SI',
   waterproof_map: 'Veekindel kaart',
   other: 'Muu',
+  gender_required: 'Sugu on kohustuslik',
+  dob_required: 'Sünniaeg on kohustuslik',
+  dob_invalid: 'Vigane kuupäev (YYYY-MM-DD)',
+  failed_save: 'Salvestamine ebaõnnestus.',
 };
 
 export type TranslationKey = keyof typeof translations;

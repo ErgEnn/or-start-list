@@ -21,8 +21,9 @@ type MainListProps = {
   selectedRegistrationsByCompetitor: Record<string, SelectedRegistrationInfo>;
   submittingCompetitorIds: Set<string>;
   onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
-  onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: "cash" | "prepaid" | "stebby" | "debt" | "other") => Promise<void>;
+  onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: "cash" | "prepaid" | "stebby" | "debt" | "other", competitionGroupName?: string) => Promise<void>;
   onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: "cash" | "prepaid" | "stebby" | "debt" | "other") => Promise<void>;
+  onAddPaymentGroupMember: (paymentGroupId: string, competitorId: string) => Promise<void>;
   openCompetitorId: { competitorId: string; token: number } | null;
 };
 
@@ -50,6 +51,7 @@ export const MainList = memo(function MainList({
   onSelectCompetitionGroup,
   onSelectCourse,
   onUpdateRegistrationPayment,
+  onAddPaymentGroupMember,
   openCompetitorId,
 }: MainListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -191,6 +193,8 @@ export const MainList = memo(function MainList({
           onSelectCompetitionGroup={onSelectCompetitionGroup}
           onSelectCourse={onSelectCourse}
           onUpdateRegistrationPayment={onUpdateRegistrationPayment}
+          paymentGroups={paymentGroups}
+          onAddPaymentGroupMember={onAddPaymentGroupMember}
           onClose={() => setSelectedCompetitorId(null)}
         />
       ) : null}

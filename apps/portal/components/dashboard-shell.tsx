@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarOutlined, CompassOutlined, DesktopOutlined, FileTextOutlined, HomeOutlined, LogoutOutlined, TableOutlined, TagOutlined, TeamOutlined } from "@ant-design/icons";
+import { ApiOutlined, CalendarOutlined, CompassOutlined, DesktopOutlined, FileTextOutlined, HomeOutlined, LogoutOutlined, TableOutlined, TagOutlined, TeamOutlined } from "@ant-design/icons";
 import { Button, Layout, Menu, Select, Space } from "antd";
 import Title from "antd/es/typography/Title";
 import { signOut } from "next-auth/react";
@@ -79,6 +79,11 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
               key: "/dashboard/events",
               icon: <CalendarOutlined />,
               label: <Link href="/dashboard/events">{t("nav.events")}</Link>,
+            },
+            {
+              key: "/dashboard/stebby",
+              icon: <ApiOutlined />,
+              label: <Link href="/dashboard/stebby">{t("nav.stebby")}</Link>,
             },
           ]}
         />

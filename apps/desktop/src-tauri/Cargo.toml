@@ -25,7 +25,7 @@ uuid = { version = "=1.10.0", features = ["v4"] }
 time = "=0.3.36"
 log = "0.4"
 simplelog = "0.12"
-serialport = "4"
+tauri-plugin-serialplugin = "2"
 open = "5"
 
 [features]

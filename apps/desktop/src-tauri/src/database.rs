@@ -7,7 +7,7 @@ use diesel::{
 };
 use std::{collections::HashMap, path::PathBuf, sync::Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
-use time::{format_description::well_known::Rfc3339, OffsetDateTime};
+use time::{format_description::well_known::Rfc3339, Date, Month, OffsetDateTime};
 use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
@@ -16,7 +16,8 @@ use crate::models::{
     ConfigRow, ConfigValueRow, CountRow, DesktopClaimReservedCodeRequest, DesktopCreateRegistrationRequest,
     InfoPagePayload, InfoPageRow,
     DesktopCreateRegistrationResponse, DesktopClearRegistrationRequest, DesktopEventState,
-    DesktopUpdateRegistrationPaymentRequest,
+    DesktopAddPaymentGroupMemberRequest, PaymentGroupMemberAddedPayload,
+    DesktopUpdateCompetitorDataRequest, DesktopUpdateRegistrationPaymentRequest,
     DesktopQueryCompetitorsRequest, DesktopQueryCompetitorsResponse, DesktopSetCompetitionGroupRequest,
     DesktopSyncStatus, EventRow, EventVersionRow, MapPreferencePayload, MapPreferenceRow,
     OutboxItem, OutboxRow, PaymentGroupMemberPayload,
@@ -351,19 +352,49 @@ pub fn load_selected_event_id(db: &mut SqliteConnection) -> Result<String, Strin
     Ok(rows.into_iter().next().map(|row| row.config_value).unwrap_or_default())
 }
 
+fn parse_event_start_date(value: &str) -> Option<Date> {
+    let mut segments = value.split('-');
+    let year = segments.next()?.parse().ok()?;
+    let month = Month::try_from(segments.next()?.parse::<u8>().ok()?).ok()?;
+    let day = segments.next()?.parse().ok()?;
+    if segments.next().is_some() {
+        return None;
+    }
+    Date::from_calendar_date(year, month, day).ok()
+}
+
+fn find_closest_event_id(events: &[EventRow], today: Date) -> Option<String> {
+    let today_julian_day = today.to_julian_day();
+    events
+        .iter()
+        .filter_map(|event| {
+            let start_date = parse_event_start_date(event.start_date.as_deref()?)?;
+            let day_distance = (start_date.to_julian_day() - today_julian_day).abs();
+            Some((day_distance, event.event_id.clone()))
+        })
+        .min_by_key(|(day_distance, _)| *day_distance)
+        .map(|(_, event_id)| event_id)
+}
+
 pub fn ensure_selected_event_id(db: &mut SqliteConnection) -> Result<String, String> {
+    ensure_selected_event_id_for_date(db, OffsetDateTime::now_utc().date())
+}
+
+fn ensure_selected_event_id_for_date(db: &mut SqliteConnection, today: Date) -> Result<String, String> {
     let events = load_events(db)?;
-    let selected = load_selected_event_id(db)?;
-    if !selected.is_empty() && events.iter().any(|event| event.event_id == selected) {
-        return Ok(selected);
+    let current_selected = load_selected_event_id(db)?;
+
+    // Keep current selection if still valid
+    if !current_selected.is_empty() && events.iter().any(|event| event.event_id == current_selected) {
+        return Ok(current_selected);
     }
 
-    let fallback = events
-        .first()
-        .map(|event| event.event_id.clone())
+    // Pick the event closest to today, then fall back to the first event
+    let selected = find_closest_event_id(&events, today)
+        .or_else(|| events.first().map(|event| event.event_id.clone()))
         .unwrap_or_default();
-    upsert_device_config_value(db, SELECTED_EVENT_KEY, &fallback).map_err(|error| error.to_string())?;
-    Ok(fallback)
+    upsert_device_config_value(db, SELECTED_EVENT_KEY, &selected).map_err(|error| error.to_string())?;
+    Ok(selected)
 }
 
 pub fn load_courses(db: &mut SqliteConnection, event_id: &str) -> Result<Vec<crate::models::CourseRow>, String> {
@@ -707,6 +738,7 @@ fn derive_selected_competition_group(
     eligible_groups.first().map(|group| group.name.clone())
 }
 
+#[allow(dead_code)]
 fn load_base_competitor(
     db: &mut SqliteConnection,
     competitor_id: &str,
@@ -774,6 +806,27 @@ pub fn query_competitors(
         indexed_count: indexed_competitors_count(db)?,
         rows,
     })
+}
+
+pub fn update_competitor_data(
+    db: &mut SqliteConnection,
+    request: DesktopUpdateCompetitorDataRequest,
+) -> Result<(), String> {
+    if let Some(ref gender) = request.gender {
+        sql_query("UPDATE source_competitors SET gender = ? WHERE competitor_id = ?")
+            .bind::<Text, _>(gender)
+            .bind::<Text, _>(&request.competitor_id)
+            .execute(db)
+            .map_err(|error| error.to_string())?;
+    }
+    if let Some(ref dob) = request.dob {
+        sql_query("UPDATE source_competitors SET dob = ? WHERE competitor_id = ?")
+            .bind::<Text, _>(dob)
+            .bind::<Text, _>(&request.competitor_id)
+            .execute(db)
+            .map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 pub fn save_competition_group_selection(
@@ -895,39 +948,100 @@ pub fn load_available_reserved_codes(
         .collect())
 }
 
+pub fn add_payment_group_member(
+    db: &mut SqliteConnection,
+    request: DesktopAddPaymentGroupMemberRequest,
+) -> Result<Vec<PaymentGroupPayload>, String> {
+    // Validate payment group exists
+    let exists = sql_query(
+        "SELECT COUNT(*) AS count FROM payment_groups WHERE payment_group_id = ?",
+    )
+    .bind::<Text, _>(&request.payment_group_id)
+    .get_result::<CountRow>(db)
+    .map_err(|error| error.to_string())?
+    .count
+        > 0;
+
+    if !exists {
+        return Err("Payment group not found.".to_string());
+    }
+
+    let created_at = now_iso()?;
+
+    db.transaction::<(), diesel::result::Error, _>(|connection| {
+        // Insert member (ignore if already exists)
+        sql_query(
+            "INSERT OR IGNORE INTO payment_group_members(payment_group_id, competitor_id, price_override_cents, compensated_events, events_attended) \
+             VALUES (?, ?, NULL, NULL, 0)",
+        )
+        .bind::<Text, _>(&request.payment_group_id)
+        .bind::<Text, _>(&request.competitor_id)
+        .execute(connection)?;
+
+        let next_local_seq = sql_query(
+            "SELECT COALESCE(MAX(local_seq), 0) + 1 AS count \
+             FROM ( \
+               SELECT local_seq FROM outbox \
+               UNION ALL \
+               SELECT local_seq FROM registrations \
+             )",
+        )
+        .get_result::<CountRow>(connection)?
+        .count;
+
+        let payload = serde_json::to_string(&PaymentGroupMemberAddedPayload {
+            payment_group_id: request.payment_group_id.clone(),
+            competitor_id: request.competitor_id.clone(),
+        })
+        .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
+
+        sql_query(
+            "INSERT INTO outbox(local_seq, item_type, payload, created_at, status) VALUES (?, ?, ?, ?, 'pending')",
+        )
+        .bind::<BigInt, _>(next_local_seq)
+        .bind::<Text, _>("payment_group_member_added")
+        .bind::<Text, _>(payload)
+        .bind::<Text, _>(&created_at)
+        .execute(connection)?;
+
+        Ok(())
+    })
+    .map_err(|error| error.to_string())?;
+
+    load_payment_groups(db)
+}
+
 pub fn claim_reserved_code(
     db: &mut SqliteConnection,
     request: DesktopClaimReservedCodeRequest,
 ) -> Result<DesktopCreateRegistrationResponse, String> {
-    let is_manual_eol = request.is_manual_eol.unwrap_or(false);
+    let eol_code = request.eol_code.clone();
+    let synthetic_dob = request.birth_year.map(|y| format!("{}-01-01", y));
 
-    if !is_manual_eol {
-        // Verify reserved code exists and is still available
-        let code_count = sql_query(
-            "SELECT COUNT(*) AS count FROM reserved_codes WHERE code = ? AND is_reserved = 1",
-        )
-        .bind::<Text, _>(&request.code)
-        .get_result::<CountRow>(db)
-        .map_err(|error| error.to_string())?
-        .count;
-        if code_count == 0 {
-            return Err("Reserved code not found or already claimed.".to_string());
-        }
-    }
+    // Check if reserved code exists and mark as unreserved
+    let is_reserved_code = sql_query(
+        "SELECT COUNT(*) AS count FROM reserved_codes WHERE code = ? AND is_reserved = 1",
+    )
+    .bind::<Text, _>(&eol_code)
+    .get_result::<CountRow>(db)
+    .map_err(|error| error.to_string())?
+    .count
+        > 0;
 
-    let competitor_id = Uuid::new_v4().to_string();
-    let eol_number = request.code.clone();
+    // Check if competitor already exists in directory
+    let existing_competitor = sql_query(
+        "SELECT competitor_id, eol_number, first_name, last_name, gender, dob, club, si_card \
+         FROM source_competitors WHERE eol_number = ?",
+    )
+    .bind::<Text, _>(&eol_code)
+    .get_results::<BaseCompetitorRow>(db)
+    .map_err(|error| error.to_string())?;
 
-    // Build a BaseCompetitorRow to compute eligible groups and price
-    let base_competitor = BaseCompetitorRow {
-        competitor_id: competitor_id.clone(),
-        eol_number: eol_number.clone(),
-        first_name: request.first_name.clone(),
-        last_name: request.last_name.clone(),
-        gender: Some(request.gender.clone()),
-        dob: Some(request.dob.clone()),
-        club: request.club.clone(),
-        si_card: request.si_card.clone(),
+    let is_new_competitor = existing_competitor.is_empty();
+    let competitor_id = if is_new_competitor {
+        eol_code.clone()
+    } else {
+        existing_competitor[0].competitor_id.clone()
     };
 
     let competition_group_name = request.competition_group_name.clone().unwrap_or_default();
@@ -937,9 +1051,8 @@ pub fn claim_reserved_code(
     let price_cents = if competition_group_name.is_empty() {
         0i64
     } else {
-        let eligible_groups = eligible_competition_groups_for_competitor(&base_competitor, &competition_groups);
-        if !eligible_groups.iter().any(|group| group.name == competition_group_name) {
-            return Err("Competition group is not valid for this competitor.".to_string());
+        if !competition_groups.iter().any(|group| group.name == competition_group_name) {
+            return Err("Competition group not found.".to_string());
         }
         find_effective_price(
             &competitor_id,
@@ -966,40 +1079,29 @@ pub fn claim_reserved_code(
     let registration_id = Uuid::new_v4().to_string();
 
     db.transaction::<(), diesel::result::Error, _>(|connection| {
-        // 1. Insert into source_competitors
-        sql_query(
-            "INSERT INTO source_competitors(competitor_id, eol_number, first_name, last_name, gender, dob, club, si_card) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .bind::<Text, _>(&competitor_id)
-        .bind::<Text, _>(&eol_number)
-        .bind::<Text, _>(&request.first_name)
-        .bind::<Text, _>(&request.last_name)
-        .bind::<diesel::sql_types::Nullable<Text>, _>(Some(request.gender.as_str()))
-        .bind::<diesel::sql_types::Nullable<Text>, _>(Some(request.dob.as_str()))
-        .bind::<diesel::sql_types::Nullable<Text>, _>(request.club.as_deref())
-        .bind::<diesel::sql_types::Nullable<Text>, _>(request.si_card.as_deref())
-        .execute(connection)?;
-
-        // 2. Mark reserved code as claimed and store on-site registration data
-        if !is_manual_eol {
+        // 1. If new competitor, insert into source_competitors
+        if is_new_competitor {
             sql_query(
-                "UPDATE reserved_codes SET is_reserved = 0, \
-                 competitor_id = ?, eol_number = ?, first_name = ?, last_name = ?, \
-                 gender = ?, dob = ?, club = ?, si_card = ?, county = ?, email = ? \
-                 WHERE code = ?",
+                "INSERT INTO source_competitors(competitor_id, eol_number, first_name, last_name, gender, dob, club, si_card) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind::<Text, _>(&competitor_id)
-            .bind::<Text, _>(&eol_number)
-            .bind::<Text, _>(&request.first_name)
-            .bind::<Text, _>(&request.last_name)
-            .bind::<diesel::sql_types::Nullable<Text>, _>(Some(request.gender.as_str()))
-            .bind::<diesel::sql_types::Nullable<Text>, _>(Some(request.dob.as_str()))
-            .bind::<diesel::sql_types::Nullable<Text>, _>(request.club.as_deref())
-            .bind::<diesel::sql_types::Nullable<Text>, _>(request.si_card.as_deref())
-            .bind::<diesel::sql_types::Nullable<Text>, _>(request.county.as_deref())
-            .bind::<diesel::sql_types::Nullable<Text>, _>(request.email.as_deref())
-            .bind::<Text, _>(&request.code)
+            .bind::<Text, _>(&eol_code)
+            .bind::<Text, _>("")
+            .bind::<Text, _>("")
+            .bind::<Nullable<Text>, _>(request.gender.as_deref())
+            .bind::<Nullable<Text>, _>(synthetic_dob.as_deref())
+            .bind::<Nullable<Text>, _>(None::<&str>)
+            .bind::<Nullable<Text>, _>(None::<&str>)
+            .execute(connection)?;
+        }
+
+        // 2. Mark reserved code as unreserved (no personal data stored)
+        if is_reserved_code {
+            sql_query(
+                "UPDATE reserved_codes SET is_reserved = 0 WHERE code = ?",
+            )
+            .bind::<Text, _>(&eol_code)
             .execute(connection)?;
         }
 
@@ -1015,31 +1117,34 @@ pub fn claim_reserved_code(
         .get_result::<CountRow>(connection)?
         .count;
 
-        // 4. Insert outbox item for reserved_code_claimed
-        let claim_payload = serde_json::to_string(&ReservedCodeClaimedPayload {
-            code: request.code.clone(),
-            competitor_id: competitor_id.clone(),
-            eol_number: eol_number.clone(),
-            first_name: request.first_name.clone(),
-            last_name: request.last_name.clone(),
-            gender: Some(request.gender.clone()),
-            dob: Some(request.dob.clone()),
-            club: request.club.clone(),
-            si_card: request.si_card.clone(),
-            county: request.county.clone(),
-            email: request.email.clone(),
-            is_manual_eol: Some(is_manual_eol),
-        })
-        .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
+        // 4. Insert outbox item for reserved_code_claimed (syncs competitor + reserved code state)
+        if is_new_competitor || is_reserved_code {
+            let claim_payload = serde_json::to_string(&ReservedCodeClaimedPayload {
+                code: eol_code.clone(),
+                competitor_id: competitor_id.clone(),
+                eol_number: eol_code.clone(),
+                first_name: None,
+                last_name: None,
+                gender: request.gender.clone(),
+                dob: synthetic_dob.clone(),
+                club: None,
+                si_card: None,
+                county: None,
+                email: None,
+                is_manual_eol: Some(!is_reserved_code),
+                birth_year: request.birth_year,
+            })
+            .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
 
-        sql_query(
-            "INSERT INTO outbox(local_seq, item_type, payload, created_at, status) VALUES (?, ?, ?, ?, 'pending')",
-        )
-        .bind::<BigInt, _>(claim_seq)
-        .bind::<Text, _>("reserved_code_claimed")
-        .bind::<Text, _>(claim_payload)
-        .bind::<Text, _>(&created_at)
-        .execute(connection)?;
+            sql_query(
+                "INSERT INTO outbox(local_seq, item_type, payload, created_at, status) VALUES (?, ?, ?, ?, 'pending')",
+            )
+            .bind::<BigInt, _>(claim_seq)
+            .bind::<Text, _>("reserved_code_claimed")
+            .bind::<Text, _>(claim_payload)
+            .bind::<Text, _>(&created_at)
+            .execute(connection)?;
+        }
 
         // 5. Get next local_seq for registration
         let reg_seq = sql_query(
@@ -1126,15 +1231,12 @@ pub fn create_registration(
     db: &mut SqliteConnection,
     request: DesktopCreateRegistrationRequest,
 ) -> Result<DesktopCreateRegistrationResponse, String> {
-    let competitor = load_base_competitor(db, &request.competitor_id)?
-        .ok_or_else(|| "Competitor not found.".to_string())?;
     let competition_groups = load_competition_groups(db)?;
-    let eligible_groups = eligible_competition_groups_for_competitor(&competitor, &competition_groups);
-    if !eligible_groups
+    if !competition_groups
         .iter()
         .any(|group| group.name == request.competition_group_name)
     {
-        return Err("Competition group is not valid for this competitor.".to_string());
+        return Err("Competition group not found.".to_string());
     }
 
     let payment_groups = load_payment_groups(db)?;
@@ -1162,7 +1264,50 @@ pub fn create_registration(
     let registration_id = Uuid::new_v4().to_string();
 
     db.transaction::<(), diesel::result::Error, _>(|connection| {
-        let next_local_seq = sql_query(
+        sql_query(
+            "INSERT INTO competition_group_selections(event_id, competitor_id, competition_group_name) VALUES (?, ?, ?) \
+             ON CONFLICT(event_id, competitor_id) DO UPDATE SET competition_group_name = excluded.competition_group_name",
+        )
+        .bind::<Text, _>(&request.event_id)
+        .bind::<Text, _>(&request.competitor_id)
+        .bind::<Text, _>(&request.competition_group_name)
+        .execute(connection)?;
+
+        // Check if there's an already-synced registration that needs to be cleared on the portal
+        let has_synced_registration = sql_query(
+            "SELECT COUNT(*) AS count \
+             FROM registrations r \
+             LEFT JOIN outbox o \
+               ON o.local_seq = r.local_seq \
+              AND o.item_type = 'registration_created' \
+              AND o.status = 'pending' \
+             WHERE r.event_id = ? AND r.competitor_id = ? AND o.local_seq IS NULL",
+        )
+        .bind::<Text, _>(&request.event_id)
+        .bind::<Text, _>(&request.competitor_id)
+        .get_result::<CountRow>(connection)?
+        .count
+            > 0;
+
+        // Remove pending outbox entries for existing registration
+        sql_query(
+            "DELETE FROM outbox WHERE status = 'pending' AND local_seq IN ( \
+               SELECT local_seq FROM registrations WHERE event_id = ? AND competitor_id = ? \
+             )",
+        )
+        .bind::<Text, _>(&request.event_id)
+        .bind::<Text, _>(&request.competitor_id)
+        .execute(connection)?;
+
+        // Delete old local registration rows
+        sql_query(
+            "DELETE FROM registrations WHERE event_id = ? AND competitor_id = ?",
+        )
+        .bind::<Text, _>(&request.event_id)
+        .bind::<Text, _>(&request.competitor_id)
+        .execute(connection)?;
+
+        let mut next_local_seq = sql_query(
             "SELECT COALESCE(MAX(local_seq), 0) + 1 AS count \
              FROM ( \
                SELECT local_seq FROM outbox \
@@ -1173,14 +1318,27 @@ pub fn create_registration(
         .get_result::<CountRow>(connection)?
         .count;
 
-        sql_query(
-            "INSERT INTO competition_group_selections(event_id, competitor_id, competition_group_name) VALUES (?, ?, ?) \
-             ON CONFLICT(event_id, competitor_id) DO UPDATE SET competition_group_name = excluded.competition_group_name",
-        )
-        .bind::<Text, _>(&request.event_id)
-        .bind::<Text, _>(&request.competitor_id)
-        .bind::<Text, _>(&request.competition_group_name)
-        .execute(connection)?;
+        // If old registration was already synced, send a clear to the portal first
+        if has_synced_registration {
+            let clear_payload = serde_json::to_string(&RegistrationClearedPayload {
+                event_id: request.event_id.clone(),
+                competitor_id: request.competitor_id.clone(),
+                created_at_device: created_at.clone(),
+                local_seq: next_local_seq,
+            })
+            .map_err(|error| diesel::result::Error::SerializationError(Box::new(error)))?;
+
+            sql_query(
+                "INSERT INTO outbox(local_seq, item_type, payload, created_at, status) VALUES (?, ?, ?, ?, 'pending')",
+            )
+            .bind::<BigInt, _>(next_local_seq)
+            .bind::<Text, _>("registration_cleared")
+            .bind::<Text, _>(clear_payload)
+            .bind::<Text, _>(&created_at)
+            .execute(connection)?;
+
+            next_local_seq += 1;
+        }
 
         sql_query(
             "INSERT INTO registrations(registration_id, device_id, event_id, competitor_id, course_id, competition_group_name, price_cents, paid_price_cents, payment_method, created_at_device, local_seq) \
@@ -1701,6 +1859,35 @@ mod tests {
         assert_eq!(eligible.len(), 2);
         assert_eq!(eligible[0].name, "M21");
         assert_eq!(eligible[1].name, "N21");
+    }
+
+    #[test]
+    fn select_startup_event_id_prefers_event_closest_to_today() {
+        let mut db = open_temp_db("startup-event-selection");
+        sql_query(
+            "INSERT INTO events(event_id, name, start_date) VALUES \
+             ('event-past', 'Past Event', '2026-03-20'), \
+             ('event-closest', 'Closest Event', '2026-03-23'), \
+             ('event-future', 'Future Event', '2026-03-30')",
+        )
+        .execute(&mut db)
+        .expect("insert events");
+        upsert_device_config_value(&mut db, SELECTED_EVENT_KEY, "event-future").expect("seed selected event");
+
+        // Clear selected so ensure_selected picks fresh
+        upsert_device_config_value(&mut db, SELECTED_EVENT_KEY, "").expect("clear selected");
+
+        let selected_event_id = ensure_selected_event_id_for_date(
+            &mut db,
+            Date::from_calendar_date(2026, Month::March, 22).expect("valid date"),
+        )
+        .expect("select startup event");
+
+        assert_eq!(selected_event_id, "event-closest");
+        assert_eq!(
+            load_selected_event_id(&mut db).expect("load selected event"),
+            "event-closest"
+        );
     }
 
 }

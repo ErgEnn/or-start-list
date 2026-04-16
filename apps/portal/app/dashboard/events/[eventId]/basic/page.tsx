@@ -4,6 +4,7 @@ import { Button, Card, Form, Input, Popconfirm, Space, message } from "antd";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n-client";
+import { useSetEventName } from "../event-name-context";
 
 type EventFormValues = {
   name: string;
@@ -29,6 +30,7 @@ export default function EventBasicInfoPage() {
   const [formValues, setFormValues] = useState<EventFormValues | null>(null);
   const [form] = Form.useForm<EventFormValues>();
   const [apiMessage, contextHolder] = message.useMessage();
+  const setEventName = useSetEventName();
 
   async function loadEvent() {
     setLoading(true);
@@ -45,6 +47,7 @@ export default function EventBasicInfoPage() {
       date: payload.event.startDate ?? "",
     };
     setFormValues(values);
+    setEventName(payload.event.name);
     setLoading(false);
   }
 

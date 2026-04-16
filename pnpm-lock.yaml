@@ -46,6 +46,9 @@ importers:
       react-dom:
         specifier: ^19.0.0
         version: 19.2.4(react@19.2.4)
+      tauri-plugin-serialplugin-api:
+        specifier: ^2.22.0
+        version: 2.22.0
       zod:
         specifier: ^3.24.1
         version: 3.25.76
@@ -2980,6 +2983,9 @@ packages:
   tabbable@6.4.0:
     resolution: {integrity: sha512-05PUHKSNE8ou2dwIxTngl4EzcnsCDZGJ/iCLtDflR/SHB/ny14rXc+qU5P4mG9JkusiV7EivzY9Mhm55AzAvCg==}
 
+  tauri-plugin-serialplugin-api@2.22.0:
+    resolution: {integrity: sha512-QV2SLgVr2pxnTZNYet9V8zZ+IISZCzLmxoe56uksO3Dv+TBahBYOf1EkBD6LD7dv9wr6E7EF+z7TX5WCHQ+nJQ==}
+
   throttle-debounce@5.0.2:
     resolution: {integrity: sha512-B71/4oyj61iNH0KeCamLuE2rmKuTO5byTOSVwECM5FA7TiAiAW+UqTKZ9ERueC4qvgSttUhdmq1mXC3kJqGX7A==}
     engines: {node: '>=12.22'}
@@ -5763,6 +5769,10 @@ snapshots:
   supports-preserve-symlinks-flag@1.0.0: {}
 
   tabbable@6.4.0: {}
+
+  tauri-plugin-serialplugin-api@2.22.0:
+    dependencies:
+      '@tauri-apps/api': 2.10.1
 
   throttle-debounce@5.0.2: {}
 

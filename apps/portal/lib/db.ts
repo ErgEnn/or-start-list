@@ -260,6 +260,41 @@ async function createSchema(): Promise<void> {
       updated_at timestamptz NOT NULL DEFAULT now()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stebby_config (
+      id text PRIMARY KEY,
+      api_key text NOT NULL,
+      last_synced_at timestamptz,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stebby_persons (
+      id bigserial PRIMARY KEY,
+      name text NOT NULL,
+      id_code text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS stebby_persons_name_uidx ON stebby_persons(name)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS stebby_tickets (
+      id bigserial PRIMARY KEY,
+      person_id bigint NOT NULL REFERENCES stebby_persons(id) ON DELETE CASCADE,
+      ticket_code text NOT NULL,
+      valid_until timestamptz,
+      purchasable_name text,
+      purchasable_code text,
+      purchasable_price numeric(10, 2),
+      purchasable_category text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS stebby_tickets_code_uidx ON stebby_tickets(ticket_code)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS stebby_tickets_person_id_idx ON stebby_tickets(person_id)`);
 }
 
 export async function withTransaction<T>(handler: (tx: DbLike) => Promise<T>): Promise<T> {

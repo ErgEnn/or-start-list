@@ -13,6 +13,11 @@ import {
   reservedCodeClaimedPayloadSchema,
 } from "./domain";
 
+export const paymentGroupMemberAddedPayloadSchema = z.object({
+  paymentGroupId: z.string().min(1),
+  competitorId: z.string().min(1),
+});
+
 export const outboxItemSchema = z.discriminatedUnion("type", [
   z.object({
     localSeq: z.number().int().nonnegative(),
@@ -32,6 +37,13 @@ export const outboxItemSchema = z.discriminatedUnion("type", [
     localSeq: z.number().int().nonnegative(),
     type: z.literal("reserved_code_claimed"),
     payload: reservedCodeClaimedPayloadSchema,
+    createdAt: z.string().min(1),
+    status: z.enum(["pending", "synced", "failed"]),
+  }),
+  z.object({
+    localSeq: z.number().int().nonnegative(),
+    type: z.literal("payment_group_member_added"),
+    payload: paymentGroupMemberAddedPayloadSchema,
     createdAt: z.string().min(1),
     status: z.enum(["pending", "synced", "failed"]),
   }),
@@ -113,3 +125,4 @@ export type CompetitorDeltaResponse = z.infer<typeof competitorDeltaResponseSche
 export type SourceCompetitorDeltaResponse = z.infer<typeof sourceCompetitorDeltaResponseSchema>;
 export type PaymentGroupsResponse = z.infer<typeof paymentGroupsResponseSchema>;
 export type CompetitionGroupsResponse = z.infer<typeof competitionGroupsResponseSchema>;
+export type PaymentGroupMemberAddedPayload = z.infer<typeof paymentGroupMemberAddedPayloadSchema>;

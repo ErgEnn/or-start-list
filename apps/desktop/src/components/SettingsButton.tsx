@@ -29,7 +29,8 @@ import {
   type DeviceConfig,
 } from "../lib/device-config";
 import UsbIcon from "@mui/icons-material/Usb";
-import { desktopForceSync, desktopRefreshCompetitors, siConnect } from "../lib/desktop";
+import { desktopForceSync, desktopRefreshCompetitors } from "../lib/desktop";
+import { siConnect } from "../lib/siSerial";
 import { useSiReaderStore } from "../stores/siReaderStore";
 import { t } from "../i18n";
 
@@ -148,7 +149,6 @@ export function SettingsButton({ onSaved, onTextScalePreview, onCancel }: Settin
     setSiMessage("");
     try {
       await siConnect();
-      useSiReaderStore.getState().setConnected(true);
       setSiMessage("OK");
     } catch (e: unknown) {
       console.error("SI connect error:", e);
