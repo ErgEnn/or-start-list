@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PersonAddIcon from "@mui/icons-material/PersonAdd";
 import {
   Alert,
@@ -44,6 +44,32 @@ function formatPrice(cents: number): string {
   return (cents / 100).toFixed(2);
 }
 
+function sortGroups(groups: CompetitionGroup[]): CompetitionGroup[] {
+  return [...groups].sort((a, b) => {
+    const minA = a.minYear ?? -Infinity;
+    const minB = b.minYear ?? -Infinity;
+    if (minA !== minB) return minB - minA;
+    const maxA = a.maxYear ?? Infinity;
+    const maxB = b.maxYear ?? Infinity;
+    return maxA - maxB;
+  });
+}
+
+function getEligibleGroups(
+  gender: string,
+  birthYear: number | null,
+  competitionGroups: CompetitionGroup[],
+): CompetitionGroup[] {
+  return competitionGroups.filter((group) => {
+    if (gender && group.gender && group.gender !== gender) return false;
+    if (birthYear != null) {
+      if (group.minYear != null && birthYear < group.minYear) return false;
+      if (group.maxYear != null && birthYear > group.maxYear) return false;
+    }
+    return true;
+  });
+}
+
 export function AddCompetitorButton({
   courses,
   competitionGroups,
@@ -66,8 +92,22 @@ export function AddCompetitorButton({
     ? Number.parseInt(birthYear.trim(), 10)
     : null;
 
+  const eligibleGroups = useMemo(
+    () => sortGroups(getEligibleGroups(gender, parsedBirthYear, competitionGroups)),
+    [gender, parsedBirthYear, competitionGroups],
+  );
+
   const selectedGroup = competitionGroups.find((g) => g.name === competitionGroupName);
   const selectedGroupPrice = selectedGroup?.priceCents ?? null;
+
+  // Auto-select first eligible competition group whenever eligibility changes
+  useEffect(() => {
+    if (eligibleGroups.length > 0) {
+      setCompetitionGroupName(eligibleGroups[0].name);
+    } else {
+      setCompetitionGroupName("");
+    }
+  }, [eligibleGroups]);
 
   // Auto-select first course if only one
   useEffect(() => {
@@ -150,7 +190,7 @@ export function AddCompetitorButton({
               onChange={(e) => setEolCode(e.target.value)}
             />
 
-            <Box sx={{ display: "flex", gap: 1 }}>
+            <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
               <FormControl sx={{ flex: 1 }}>
                 <InputLabel>Sünniaasta</InputLabel>
                 <Select
@@ -200,7 +240,7 @@ export function AddCompetitorButton({
                 }}
               >
                 <MenuItem value="">—</MenuItem>
-                {competitionGroups.map((group) => (
+                {eligibleGroups.map((group) => (
                   <MenuItem key={group.name} value={group.name}>
                     {group.name}
                   </MenuItem>

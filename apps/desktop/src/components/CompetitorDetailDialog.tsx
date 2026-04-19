@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -45,6 +45,17 @@ type CompetitorDetailDialogProps = {
 function parseBirthYear(dob: string): number | null {
   const match = /^(\d{4})/.exec(dob);
   return match ? Number.parseInt(match[1], 10) : null;
+}
+
+function sortGroups(groups: CompetitionGroup[]): CompetitionGroup[] {
+  return [...groups].sort((a, b) => {
+    const minA = a.minYear ?? -Infinity;
+    const minB = b.minYear ?? -Infinity;
+    if (minA !== minB) return minB - minA;
+    const maxA = a.maxYear ?? Infinity;
+    const maxB = b.maxYear ?? Infinity;
+    return maxA - maxB;
+  });
 }
 
 function getEligibleGroups(
@@ -133,9 +144,16 @@ export function CompetitorDetailDialog({
   const [localPaymentGroupId, setLocalPaymentGroupId] = useState('');
 
   const eligibleGroups = useMemo(
-    () => getEligibleGroups(localGender || null, localDob || null, allCompetitionGroups),
+    () => sortGroups(getEligibleGroups(localGender || null, localDob || null, allCompetitionGroups)),
     [localGender, localDob, allCompetitionGroups],
   );
+
+  // Auto-select first eligible competition group whenever eligibility changes
+  useEffect(() => {
+    if (eligibleGroups.length > 0) {
+      setLocalCompetitionGroup(eligibleGroups[0].name);
+    }
+  }, [eligibleGroups]);
 
   const selectedGroupPriceCents = useMemo(() => {
     if (!localCompetitionGroup) return null;
