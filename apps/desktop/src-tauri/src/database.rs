@@ -708,7 +708,7 @@ fn find_effective_price(
                 continue;
             }
             if let Some(price) = member.price_override_cents {
-                candidates.push(price);
+                candidates.push(price * 100);
             } else if let Some(global) = group.global_price_override {
                 candidates.push(global * 100);
             }

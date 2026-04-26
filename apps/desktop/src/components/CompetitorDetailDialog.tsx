@@ -20,7 +20,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { UNDECIDED_COURSE_ID, type CompetitionGroup, type Course, type DesktopCompetitorRow, type MapPreferenceMember, type PaymentGroup, type PaymentMethod, type SelectedRegistrationInfo } from '@or/shared';
+import { UNDECIDED_COURSE_ID, PAYMENT_METHODS, type CompetitionGroup, type Course, type DesktopCompetitorRow, type MapPreferenceMember, type PaymentGroup, type PaymentMethodValue, type SelectedRegistrationInfo } from '@or/shared';
 import { desktopUpdateCompetitorData } from '../lib/desktop';
 import { t } from '../i18n';
 
@@ -35,8 +35,8 @@ type CompetitorDetailDialogProps = {
   selectedRegistration: SelectedRegistrationInfo | null;
   submitting: boolean;
   onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
-  onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: PaymentMethod, competitionGroupName?: string) => Promise<void>;
-  onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: PaymentMethod) => Promise<void>;
+  onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: string, competitionGroupName?: string) => Promise<void>;
+  onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: string) => Promise<void>;
   paymentGroups: PaymentGroup[];
   onAddPaymentGroupMember: (paymentGroupId: string, competitorId: string) => Promise<void>;
   onClose: () => void;
@@ -134,11 +134,12 @@ export function CompetitorDetailDialog({
     return false;
   }, [existingPaymentGroupId, paymentGroups, competitor.competitorId]);
 
-  const initialPaymentMethod = selectedRegistration?.paymentMethod ?? (paymentGroupOverridesTo0 ? 'other' : 'cash');
+  const rawPaymentMethod = selectedRegistration?.paymentMethod ?? (paymentGroupOverridesTo0 ? 'other' : 'cash');
+  const initialPaymentMethod = (rawPaymentMethod.startsWith('other(') ? 'other' : rawPaymentMethod) as PaymentMethodValue;
   const initialPaidPriceCents = selectedRegistration?.paidPriceCents ?? (competitor.priceCents ?? 0);
   const initialIsCustomPrice = selectedRegistration != null && selectedRegistration.paidPriceCents !== (competitor.priceCents ?? 0);
 
-  const [localPaymentMethod, setLocalPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod);
+  const [localPaymentMethod, setLocalPaymentMethod] = useState<PaymentMethodValue>(initialPaymentMethod);
   const [localPaidPriceInput, setLocalPaidPriceInput] = useState(initialIsCustomPrice ? (initialPaidPriceCents / 100).toFixed(2) : '');
   const [useCustomPrice, setUseCustomPrice] = useState(initialIsCustomPrice);
   const [localPaymentGroupId, setLocalPaymentGroupId] = useState('');
@@ -227,10 +228,18 @@ export function CompetitorDetailDialog({
       if (competitionGroupChanged && localCompetitionGroup) {
         await onSelectCompetitionGroup(competitor.competitorId, localCompetitionGroup);
       }
+      const resolvedPaymentMethod = (() => {
+        if (localPaymentMethod !== 'other') return localPaymentMethod;
+        const groupId = localPaymentGroupId || existingPaymentGroupId;
+        if (!groupId) return 'other';
+        const groupName = paymentGroups.find((g) => g.paymentGroupId === groupId)?.name;
+        return groupName ? `other(${groupName})` : 'other';
+      })();
+
       if (courseChanged) {
-        await onSelectCourse(competitor.competitorId, localCourseId, effectivePaidPriceCents, localPaymentMethod, localCompetitionGroup ?? undefined);
+        await onSelectCourse(competitor.competitorId, localCourseId, effectivePaidPriceCents, resolvedPaymentMethod, localCompetitionGroup ?? undefined);
       } else if (paymentMethodChanged || priceChanged) {
-        await onUpdateRegistrationPayment(competitor.competitorId, effectivePaidPriceCents, localPaymentMethod);
+        await onUpdateRegistrationPayment(competitor.competitorId, effectivePaidPriceCents, resolvedPaymentMethod);
       }
       if (localPaymentGroupId) {
         await onAddPaymentGroupMember(localPaymentGroupId, competitor.competitorId);
@@ -407,7 +416,7 @@ export function CompetitorDetailDialog({
               value={localPaymentMethod}
               disabled={submitting}
               sx={{ flexWrap: 'wrap', width: '100%', '& .MuiToggleButtonGroup-grouped': { border: '1px solid', borderColor: 'divider', borderRadius: '4px !important' } }}
-              onChange={(_, value: PaymentMethod | null) => {
+              onChange={(_, value: PaymentMethodValue | null) => {
                 if (value) {
                   setLocalPaymentMethod(value);
                   if (value !== 'other') {
@@ -416,7 +425,7 @@ export function CompetitorDetailDialog({
                 }
               }}
             >
-              {(['cash', 'debt', 'other'] as const).map((method) => (
+              {(['cash', 'debt', 'transfer', 'other'] as const).map((method) => (
                 <ToggleButton
                   key={method}
                   value={method}

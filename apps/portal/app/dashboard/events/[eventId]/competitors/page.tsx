@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DownloadOutlined } from "@ant-design/icons";
 import * as XLSX from "xlsx";
 import { useT } from "@/lib/i18n-client";
+import type { TranslationKey } from "@/lib/i18n";
 import { formatEuro } from "@/lib/money";
 import { useSetEventName } from "../event-name-context";
 
@@ -63,7 +64,11 @@ export default function EventCompetitorsPage() {
       [t("events.selectedCourse")]: row.courseName ?? "",
       [t("events.price")]: row.price ?? 0,
       [t("events.pricePaid")]: row.pricePaid ?? 0,
-      [t("events.paymentMethod")]: row.paymentMethod,
+      [t("events.paymentMethod")]: (() => {
+        const match = row.paymentMethod.match(/^(\w+)\((.+)\)$/);
+        if (match) return `${t(`events.paymentMethod.${match[1]}` as TranslationKey)} (${match[2]})`;
+        return t(`events.paymentMethod.${row.paymentMethod}` as TranslationKey);
+      })(),
     };
   }
 
@@ -147,7 +152,11 @@ export default function EventCompetitorsPage() {
                 width: 120,
                 render: (value: number | null) => formatEuro(value),
               },
-              { title: t("events.paymentMethod"), dataIndex: "paymentMethod", key: "paymentMethod", width: 150 },
+              { title: t("events.paymentMethod"), dataIndex: "paymentMethod", key: "paymentMethod", width: 150, render: (value: string) => {
+                const match = value.match(/^(\w+)\((.+)\)$/);
+                if (match) return `${t(`events.paymentMethod.${match[1]}` as TranslationKey)} (${match[2]})`;
+                return t(`events.paymentMethod.${value}` as TranslationKey);
+              } },
               {
                 title: "",
                 key: "paymentStatus",

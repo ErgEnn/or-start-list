@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Input, InputNumber, Modal, Popconfirm, Space, Statistic, Table, message } from "antd";
+import { Button, Card, Input, InputNumber, Modal, Space, Statistic, Table, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
@@ -95,15 +95,6 @@ export default function PaymentGroupsPage() {
     }
   }
 
-  async function deleteGroup(paymentGroupId: string) {
-    const response = await fetch(`/api/admin/payment-groups/${encodeURIComponent(paymentGroupId)}`, { method: "DELETE" });
-    if (!response.ok) {
-      apiMessage.error(t("paymentGroups.deleteError"));
-      return;
-    }
-    apiMessage.success(t("paymentGroups.deleteSuccess"));
-    await loadGroups();
-  }
 
   const groupsColumns: ColumnsType<PaymentGroupRow> = [
     { title: t("paymentGroups.name"), dataIndex: "name", key: "name" },
@@ -149,14 +140,9 @@ export default function PaymentGroupsPage() {
       key: "actions",
       width: 200,
       render: (_, row) => (
-        <Space>
-          <Button onClick={() => router.push(`/dashboard/payment-groups/${encodeURIComponent(row.paymentGroupId)}/settings`)}>
+        <Button onClick={() => router.push(`/dashboard/payment-groups/${encodeURIComponent(row.paymentGroupId)}/settings`)}>
             {t("paymentGroups.edit")}
           </Button>
-          <Popconfirm title={t("paymentGroups.delete")} onConfirm={() => deleteGroup(row.paymentGroupId)}>
-            <Button danger>{t("paymentGroups.delete")}</Button>
-          </Popconfirm>
-        </Space>
       ),
     },
   ];

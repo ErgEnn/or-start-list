@@ -81,7 +81,9 @@ export const paymentGroupSchema = z.object({
   competitors: z.array(paymentGroupMemberSchema),
 });
 
-export const paymentMethodSchema = z.enum(["cash", "prepaid", "stebby", "debt", "other"]);
+export const PAYMENT_METHODS = ["cash", "prepaid", "stebby", "debt", "transfer", "other"] as const;
+export type PaymentMethodValue = (typeof PAYMENT_METHODS)[number];
+export const paymentMethodSchema = z.string();
 
 export const registrationSchema = z.object({
   registrationId: z.string().uuid(),

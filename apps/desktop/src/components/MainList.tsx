@@ -21,8 +21,8 @@ type MainListProps = {
   selectedRegistrationsByCompetitor: Record<string, SelectedRegistrationInfo>;
   submittingCompetitorIds: Set<string>;
   onSelectCompetitionGroup: (competitorId: string, competitionGroupName: string) => Promise<void>;
-  onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: "cash" | "prepaid" | "stebby" | "debt" | "other", competitionGroupName?: string) => Promise<void>;
-  onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: "cash" | "prepaid" | "stebby" | "debt" | "other") => Promise<void>;
+  onSelectCourse: (competitorId: string, courseId: string | null, paidPriceCents?: number, paymentMethod?: string, competitionGroupName?: string) => Promise<void>;
+  onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: string) => Promise<void>;
   onAddPaymentGroupMember: (paymentGroupId: string, competitorId: string) => Promise<void>;
   openCompetitorId: { competitorId: string; token: number } | null;
 };
