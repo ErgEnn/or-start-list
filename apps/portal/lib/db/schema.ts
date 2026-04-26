@@ -1,5 +1,4 @@
 import {
-  bigint,
   bigserial,
   boolean,
   date,
@@ -289,48 +288,6 @@ export const mapPreferences = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-);
-
-export const stebbyConfig = pgTable("stebby_config", {
-  id: text("id").primaryKey(),
-  apiKey: text("api_key").notNull(),
-  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const stebbyPersons = pgTable(
-  "stebby_persons",
-  {
-    id: bigserial("id", { mode: "number" }).primaryKey(),
-    name: text("name").notNull(),
-    idCode: text("id_code"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("stebby_persons_name_uidx").on(table.name),
-  ],
-);
-
-export const stebbyTickets = pgTable(
-  "stebby_tickets",
-  {
-    id: bigserial("id", { mode: "number" }).primaryKey(),
-    personId: bigint("person_id", { mode: "number" }).notNull().references(() => stebbyPersons.id, { onDelete: "cascade" }),
-    ticketCode: text("ticket_code").notNull(),
-    validUntil: timestamp("valid_until", { withTimezone: true }),
-    purchasableName: text("purchasable_name"),
-    purchasableCode: text("purchasable_code"),
-    purchasablePrice: numeric("purchasable_price", { precision: 10, scale: 2 }),
-    purchasableCategory: text("purchasable_category"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("stebby_tickets_code_uidx").on(table.ticketCode),
-    index("stebby_tickets_person_id_idx").on(table.personId),
-  ],
 );
 
 export const competitionGroups = pgTable(
