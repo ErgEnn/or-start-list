@@ -600,7 +600,7 @@ pub fn build_competitor_query(filter_id: &str, query: &str) -> String {
               OR LOWER(c.first_name) LIKE '{escaped}%' ESCAPE '\\' \
               OR LOWER(c.last_name) LIKE '{escaped}%' ESCAPE '\\' \
               OR LOWER(COALESCE(c.club, '')) LIKE '{escaped}%' ESCAPE '\\' \
-              OR LOWER(COALESCE(c.si_card, '')) LIKE '{escaped}%' ESCAPE '\\')"
+              OR (',' || LOWER(COALESCE(c.si_card, '')) || ',') LIKE '%,{escaped}%' ESCAPE '\\')"
         ));
     }
 

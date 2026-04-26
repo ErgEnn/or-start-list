@@ -200,10 +200,12 @@ function toSourceCompetitor(node: EolCompetitor): SourceCompetitorRow | null {
     readText((node.Club as UnknownMap | undefined)?.Name) ??
     readText(node.ClubId) ??
     undefined;
-  const siCard = asArray(node.CCard)
+  const siCards = asArray(node.CCard)
     .flatMap((ccard) => asArray(ccard.CCardId))
     .map((cardId) => readText(cardId))
-    .find((cardId): cardId is string => Boolean(cardId));
+    .filter((cardId): cardId is string => Boolean(cardId));
+  const siCard =
+    siCards.length > 0 ? [...new Set(siCards)].join(",") : undefined;
 
   return {
     competitorId,
