@@ -144,6 +144,23 @@ export default function PaymentGroupCompetitorsPage() {
     await loadMembers();
   }
 
+  async function incrementCompEvents(row: PaymentGroupCompetitor) {
+    const next = (row.compensatedEvents ?? 0) + 1;
+    const response = await fetch(
+      `/api/admin/payment-groups/${encodeURIComponent(paymentGroupId)}/competitors/${encodeURIComponent(row.competitorId)}`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ compensatedEvents: next }),
+      },
+    );
+    if (!response.ok) {
+      apiMessage.error(t("paymentGroups.saveError"));
+      return;
+    }
+    await loadMembers();
+  }
+
   async function removeCompetitor(competitorId: string) {
     const response = await fetch(
       `/api/admin/payment-groups/${encodeURIComponent(paymentGroupId)}/competitors/${encodeURIComponent(competitorId)}`,
@@ -222,7 +239,7 @@ export default function PaymentGroupCompetitorsPage() {
     {
       title: t("paymentGroups.compensatedEvents"),
       key: "compensatedEvents",
-      width: 160,
+      width: 200,
       render: (_, row) =>
         editingCompEventsId === row.competitorId ? (
           <Space.Compact size="small">
@@ -243,6 +260,7 @@ export default function PaymentGroupCompetitorsPage() {
           <Space size={4}>
             <span>{row.compensatedEvents ?? "-"}</span>
             <Button type="text" size="small" icon={<EditOutlined />} onClick={() => startEditCompEvents(row)} />
+            <Button size="small" onClick={() => incrementCompEvents(row)}>+1</Button>
           </Space>
         ),
     },
