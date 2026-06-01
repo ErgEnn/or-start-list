@@ -25,6 +25,7 @@ type MainListProps = {
   onUpdateRegistrationPayment: (competitorId: string, paidPriceCents: number, paymentMethod: string) => Promise<void>;
   onAddPaymentGroupMember: (paymentGroupId: string, competitorId: string) => Promise<void>;
   openCompetitorId: { competitorId: string; token: number } | null;
+  isEventToday: boolean;
 };
 
 const cellPadding = '6px 16px';
@@ -53,6 +54,7 @@ export const MainList = memo(function MainList({
   onUpdateRegistrationPayment,
   onAddPaymentGroupMember,
   openCompetitorId,
+  isEventToday,
 }: MainListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef(new Map<string, HTMLDivElement>());
@@ -196,6 +198,7 @@ export const MainList = memo(function MainList({
           paymentGroups={paymentGroups}
           onAddPaymentGroupMember={onAddPaymentGroupMember}
           onClose={() => setSelectedCompetitorId(null)}
+          isEventToday={isEventToday}
         />
       ) : null}
     </>

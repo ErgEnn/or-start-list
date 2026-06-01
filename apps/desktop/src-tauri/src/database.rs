@@ -7,7 +7,7 @@ use diesel::{
 };
 use std::{collections::HashMap, path::PathBuf, sync::Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
-use time::{format_description::well_known::Rfc3339, Date, Month, OffsetDateTime};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use tokio::sync::Mutex as AsyncMutex;
 use uuid::Uuid;
 
@@ -352,49 +352,18 @@ pub fn load_selected_event_id(db: &mut SqliteConnection) -> Result<String, Strin
     Ok(rows.into_iter().next().map(|row| row.config_value).unwrap_or_default())
 }
 
-fn parse_event_start_date(value: &str) -> Option<Date> {
-    let mut segments = value.split('-');
-    let year = segments.next()?.parse().ok()?;
-    let month = Month::try_from(segments.next()?.parse::<u8>().ok()?).ok()?;
-    let day = segments.next()?.parse().ok()?;
-    if segments.next().is_some() {
-        return None;
-    }
-    Date::from_calendar_date(year, month, day).ok()
-}
-
-fn find_closest_event_id(events: &[EventRow], today: Date) -> Option<String> {
-    let today_julian_day = today.to_julian_day();
-    events
-        .iter()
-        .filter_map(|event| {
-            let start_date = parse_event_start_date(event.start_date.as_deref()?)?;
-            let day_distance = (start_date.to_julian_day() - today_julian_day).abs();
-            Some((day_distance, event.event_id.clone()))
-        })
-        .min_by_key(|(day_distance, _)| *day_distance)
-        .map(|(_, event_id)| event_id)
-}
-
 pub fn ensure_selected_event_id(db: &mut SqliteConnection) -> Result<String, String> {
-    ensure_selected_event_id_for_date(db, OffsetDateTime::now_utc().date())
-}
-
-fn ensure_selected_event_id_for_date(db: &mut SqliteConnection, today: Date) -> Result<String, String> {
     let events = load_events(db)?;
     let current_selected = load_selected_event_id(db)?;
 
-    // Keep current selection if still valid
     if !current_selected.is_empty() && events.iter().any(|event| event.event_id == current_selected) {
         return Ok(current_selected);
     }
 
-    // Pick the event closest to today, then fall back to the first event
-    let selected = find_closest_event_id(&events, today)
-        .or_else(|| events.first().map(|event| event.event_id.clone()))
-        .unwrap_or_default();
-    upsert_device_config_value(db, SELECTED_EVENT_KEY, &selected).map_err(|error| error.to_string())?;
-    Ok(selected)
+    if !current_selected.is_empty() {
+        upsert_device_config_value(db, SELECTED_EVENT_KEY, "").map_err(|error| error.to_string())?;
+    }
+    Ok(String::new())
 }
 
 pub fn load_courses(db: &mut SqliteConnection, event_id: &str) -> Result<Vec<crate::models::CourseRow>, String> {
@@ -1862,32 +1831,55 @@ mod tests {
     }
 
     #[test]
-    fn select_startup_event_id_prefers_event_closest_to_today() {
-        let mut db = open_temp_db("startup-event-selection");
+    fn ensure_selected_event_id_preserves_valid_selection() {
+        let mut db = open_temp_db("ensure-event-preserve");
         sql_query(
             "INSERT INTO events(event_id, name, start_date) VALUES \
-             ('event-past', 'Past Event', '2026-03-20'), \
-             ('event-closest', 'Closest Event', '2026-03-23'), \
-             ('event-future', 'Future Event', '2026-03-30')",
+             ('event-a', 'Event A', '2026-03-20'), \
+             ('event-b', 'Event B', '2026-03-30')",
         )
         .execute(&mut db)
         .expect("insert events");
-        upsert_device_config_value(&mut db, SELECTED_EVENT_KEY, "event-future").expect("seed selected event");
+        upsert_device_config_value(&mut db, SELECTED_EVENT_KEY, "event-b").expect("seed selected event");
 
-        // Clear selected so ensure_selected picks fresh
-        upsert_device_config_value(&mut db, SELECTED_EVENT_KEY, "").expect("clear selected");
+        let selected_event_id = ensure_selected_event_id(&mut db).expect("ensure selected");
 
-        let selected_event_id = ensure_selected_event_id_for_date(
-            &mut db,
-            Date::from_calendar_date(2026, Month::March, 22).expect("valid date"),
+        assert_eq!(selected_event_id, "event-b");
+    }
+
+    #[test]
+    fn ensure_selected_event_id_clears_stale_selection() {
+        let mut db = open_temp_db("ensure-event-stale");
+        sql_query(
+            "INSERT INTO events(event_id, name, start_date) VALUES \
+             ('event-a', 'Event A', '2026-03-20')",
         )
-        .expect("select startup event");
+        .execute(&mut db)
+        .expect("insert events");
+        upsert_device_config_value(&mut db, SELECTED_EVENT_KEY, "event-gone").expect("seed selected event");
 
-        assert_eq!(selected_event_id, "event-closest");
+        let selected_event_id = ensure_selected_event_id(&mut db).expect("ensure selected");
+
+        assert_eq!(selected_event_id, "");
         assert_eq!(
             load_selected_event_id(&mut db).expect("load selected event"),
-            "event-closest"
+            ""
         );
+    }
+
+    #[test]
+    fn ensure_selected_event_id_returns_empty_when_no_selection() {
+        let mut db = open_temp_db("ensure-event-empty");
+        sql_query(
+            "INSERT INTO events(event_id, name, start_date) VALUES \
+             ('event-a', 'Event A', '2026-03-20')",
+        )
+        .execute(&mut db)
+        .expect("insert events");
+
+        let selected_event_id = ensure_selected_event_id(&mut db).expect("ensure selected");
+
+        assert_eq!(selected_event_id, "");
     }
 
 }

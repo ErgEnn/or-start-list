@@ -16,6 +16,7 @@ import { TitleBar } from './components/TitleBar';
 import { EventSelectionDialog } from './components/EventSelectionDialog';
 import { useCompetitorDirectory } from './hooks/useCompetitorDirectory';
 import { DEFAULT_TEXT_SCALE, loadDeviceConfig, type DeviceConfig } from './lib/device-config';
+import { getTodayLocalDate } from './lib/date';
 import { useSiReaderStore } from './stores/siReaderStore';
 import type { DesktopCreateRegistrationResponse } from '@or/shared';
 
@@ -30,7 +31,10 @@ export function App() {
   const [deviceConfigRevision, setDeviceConfigRevision] = useState(0);
   const [savedTextScale, setSavedTextScale] = useState(DEFAULT_TEXT_SCALE);
   const [textScale, setTextScale] = useState(DEFAULT_TEXT_SCALE);
+  const [settingsConfigured, setSettingsConfigured] = useState(false);
+  const [initialPromptDone, setInitialPromptDone] = useState(false);
   const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const today = getTodayLocalDate();
   const {
     rows,
     groupedCount,
@@ -69,6 +73,7 @@ export function App() {
     () => events.find((event) => event.eventId === selectedEventId) ?? null,
     [events, selectedEventId],
   );
+  const isEventToday = selectedEvent !== null && selectedEvent.startDate === today;
   const showSearchDobColumn = searchInput.trim().length > 0;
 
   const jumpTargets = useMemo(() => {
@@ -92,6 +97,7 @@ export function App() {
         if (!cancelled) {
           setSavedTextScale(config.textScale);
           setTextScale(config.textScale);
+          setSettingsConfigured(Boolean(config.portalBaseUrl && config.apiKey));
         }
       })
       .catch(() => undefined);
@@ -100,6 +106,13 @@ export function App() {
       cancelled = true;
     };
   }, [deviceConfigRevision]);
+
+  useEffect(() => {
+    if (!initialPromptDone && settingsConfigured && !loading) {
+      setEventDialogOpen(true);
+      setInitialPromptDone(true);
+    }
+  }, [initialPromptDone, settingsConfigured, loading]);
 
   useEffect(() => {
     if (selectedJumpLetter && !jumpTargets.has(selectedJumpLetter)) {
@@ -160,6 +173,12 @@ export function App() {
   function handleSettingsSaved(config: DeviceConfig) {
     setSavedTextScale(config.textScale);
     setTextScale(config.textScale);
+    const nextConfigured = Boolean(config.portalBaseUrl && config.apiKey);
+    if (nextConfigured && !settingsConfigured) {
+      setEventDialogOpen(true);
+      setInitialPromptDone(true);
+    }
+    setSettingsConfigured(nextConfigured);
     setDeviceConfigRevision((current) => current + 1);
   }
 
@@ -204,11 +223,16 @@ export function App() {
       overflow: 'clip'
     }}>
     <Column>
-      <TitleBar selectedEvent={selectedEvent} onClick={() => setEventDialogOpen(true)} />
+      <TitleBar
+        selectedEvent={selectedEvent}
+        isEventToday={isEventToday}
+        onClick={() => setEventDialogOpen(true)}
+      />
       <EventSelectionDialog
         open={eventDialogOpen}
         events={events}
         selectedEventId={selectedEventId}
+        today={today}
         loading={loading}
         requireSelection={!selectedEventId}
         onClose={handleCloseEventDialog}
@@ -266,6 +290,7 @@ export function App() {
             onUpdateRegistrationPayment={updateRegistrationPayment}
             onAddPaymentGroupMember={addPaymentGroupMember}
             openCompetitorId={openCompetitorId}
+            isEventToday={isEventToday}
           />
         </Box>
       </Box>

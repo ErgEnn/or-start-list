@@ -105,6 +105,10 @@ const translations: Record<string, string> = {
   dob_required: 'Sünniaeg on kohustuslik',
   dob_invalid: 'Vigane kuupäev (YYYY-MM-DD)',
   failed_save: 'Salvestamine ebaõnnestus.',
+  event_today: 'TÄNA',
+  wrong_date_warning_title: 'Vale kuupäev',
+  wrong_date_warning_body: 'Avatud võistlus ei toimu täna. Kas jätkata registreerimise salvestamist?',
+  continue: 'Jätka',
 };
 
 export type TranslationKey = keyof typeof translations;

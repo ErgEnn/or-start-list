@@ -40,6 +40,7 @@ type CompetitorDetailDialogProps = {
   paymentGroups: PaymentGroup[];
   onAddPaymentGroupMember: (paymentGroupId: string, competitorId: string) => Promise<void>;
   onClose: () => void;
+  isEventToday: boolean;
 };
 
 function parseBirthYear(dob: string): number | null {
@@ -93,6 +94,7 @@ export function CompetitorDetailDialog({
   paymentGroups,
   onAddPaymentGroupMember,
   onClose,
+  isEventToday,
 }: CompetitorDetailDialogProps) {
   const genderMissing = !competitor.gender;
   const dobMissing = !competitor.dob;
@@ -105,6 +107,7 @@ export function CompetitorDetailDialog({
   const [competitionGroupError, setCompetitionGroupError] = useState('');
   const [courseError, setCourseError] = useState('');
   const [saveError, setSaveError] = useState('');
+  const [confirmWrongDateOpen, setConfirmWrongDateOpen] = useState(false);
 
   const mapPreferredCourseId = useMemo(() => {
     if (!mapPreference) return null;
@@ -209,8 +212,7 @@ export function CompetitorDetailDialog({
     return valid;
   }
 
-  async function handleSave() {
-    if (!validate()) return;
+  async function performSave() {
     setSaveError('');
 
     try {
@@ -248,6 +250,20 @@ export function CompetitorDetailDialog({
     } catch (cause) {
       setSaveError(cause instanceof Error ? cause.message : t('failed_save'));
     }
+  }
+
+  function handleSave() {
+    if (!validate()) return;
+    if (!isEventToday) {
+      setConfirmWrongDateOpen(true);
+      return;
+    }
+    void performSave();
+  }
+
+  async function handleConfirmWrongDate() {
+    setConfirmWrongDateOpen(false);
+    await performSave();
   }
 
   async function handleRemoveRegistration() {
@@ -526,13 +542,34 @@ export function CompetitorDetailDialog({
           </Button>
           <Button
             variant="contained"
-            onClick={() => void handleSave()}
+            onClick={handleSave}
             disabled={submitting}
           >
             {t('save')}
           </Button>
         </Box>
       </DialogActions>
+      <Dialog
+        open={confirmWrongDateOpen}
+        onClose={() => setConfirmWrongDateOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>{t('wrong_date_warning_title')}</DialogTitle>
+        <DialogContent>
+          <Typography>{t('wrong_date_warning_body')}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmWrongDateOpen(false)}>{t('cancel')}</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => void handleConfirmWrongDate()}
+          >
+            {t('continue')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 }

@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogTitle,
   Button,
+  Chip,
   List,
   ListItemButton,
   ListItemText,
@@ -17,6 +18,7 @@ type EventSelectionDialogProps = {
   open: boolean;
   events: Event[];
   selectedEventId: string;
+  today: string;
   loading: boolean;
   requireSelection: boolean;
   onClose: () => void;
@@ -31,6 +33,7 @@ export const EventSelectionDialog = memo(function EventSelectionDialog({
   open,
   events,
   selectedEventId,
+  today,
   loading,
   requireSelection,
   onClose,
@@ -54,15 +57,35 @@ export const EventSelectionDialog = memo(function EventSelectionDialog({
           <Typography color='text.secondary'>{t('event_none')}</Typography>
         ) : (
           <List disablePadding>
-            {events.map((event) => (
-              <ListItemButton
-                key={event.eventId}
-                selected={event.eventId === selectedEventId}
-                onClick={() => onSelectEvent(event.eventId)}
-              >
-                <ListItemText primary={formatEventLabel(event)} />
-              </ListItemButton>
-            ))}
+            {events.map((event) => {
+              const isToday = event.startDate === today;
+              const isPast = !!event.startDate && event.startDate < today;
+              return (
+                <ListItemButton
+                  key={event.eventId}
+                  selected={event.eventId === selectedEventId}
+                  onClick={() => onSelectEvent(event.eventId)}
+                >
+                  <ListItemText
+                    primary={formatEventLabel(event)}
+                    primaryTypographyProps={{
+                      sx: {
+                        color: isPast ? 'text.disabled' : 'text.primary',
+                        fontWeight: isToday ? 700 : 400,
+                      },
+                    }}
+                  />
+                  {isToday ? (
+                    <Chip
+                      label={t('event_today')}
+                      color='primary'
+                      size='small'
+                      sx={{ ml: 1, fontWeight: 700 }}
+                    />
+                  ) : null}
+                </ListItemButton>
+              );
+            })}
           </List>
         )}
       </DialogContent>
