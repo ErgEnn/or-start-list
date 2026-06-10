@@ -99,6 +99,8 @@ CREATE INDEX IF NOT EXISTS registrations_event_competitor_seq_idx
   ON registrations(event_id, competitor_id, local_seq DESC);
 CREATE INDEX IF NOT EXISTS registrations_event_seq_idx
   ON registrations(event_id, local_seq DESC);
+CREATE INDEX IF NOT EXISTS registrations_competitor_idx
+  ON registrations(competitor_id);
 
 CREATE TABLE IF NOT EXISTS outbox (
   local_seq INTEGER PRIMARY KEY,

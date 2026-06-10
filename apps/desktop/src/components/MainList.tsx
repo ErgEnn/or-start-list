@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Paper } from '@mui/material';
 import type { CompetitionGroup, Course, DesktopCompetitorRow, MapPreferenceMember, PaymentGroup, SelectedRegistrationInfo } from '@or/shared';
 import { t } from '../i18n';
+import { isWithinCompensatedLimit } from '../lib/payment';
 import { CompetitorDetailDialog } from './CompetitorDetailDialog';
 
 type MainListProps = {
@@ -14,7 +15,7 @@ type MainListProps = {
   loading: boolean;
   scrollTarget: { competitorId: string; token: number } | null;
   highlightedCompetitorId: string | null;
-  highlightedLetter: string | null;
+  highlightedPrefix: string | null;
   courses: Course[];
   textScale: number;
   selectedCoursesByCompetitor: Record<string, string>;
@@ -43,7 +44,7 @@ export const MainList = memo(function MainList({
   loading,
   scrollTarget,
   highlightedCompetitorId,
-  highlightedLetter,
+  highlightedPrefix,
   courses,
   textScale,
   selectedCoursesByCompetitor,
@@ -64,9 +65,10 @@ export const MainList = memo(function MainList({
     const next = new Map<string, string>();
     for (const group of paymentGroups) {
       if (!group.colorHex) continue;
-      for (const competitorId of group.competitorIds) {
-        if (!next.has(competitorId)) {
-          next.set(competitorId, group.colorHex);
+      for (const member of group.competitors) {
+        if (!isWithinCompensatedLimit(member)) continue;
+        if (!next.has(member.competitorId)) {
+          next.set(member.competitorId, group.colorHex);
         }
       }
     }
@@ -133,9 +135,10 @@ export const MainList = memo(function MainList({
             const rowColor = selectedFilter === 'all' ? colorByCompetitorId.get(item.competitorId) ?? null : null;
             const hasSelectedCourse = Boolean(selectedCoursesByCompetitor[item.competitorId]);
             const isFocused = highlightedCompetitorId === item.competitorId;
-            const isLetterHighlighted =
-              highlightedLetter !== null &&
-              item.lastName.trim().charAt(0).toLocaleUpperCase() === highlightedLetter;
+            const isPrefixHighlighted =
+              highlightedPrefix !== null &&
+              item.lastName.trim().toLocaleUpperCase().startsWith(highlightedPrefix);
+            const highlightLength = highlightedPrefix?.length ?? 0;
 
             const bgColor = isFocused
               ? '#fff3e0'
@@ -164,8 +167,8 @@ export const MainList = memo(function MainList({
                 <div style={colCode}>{item.eolNumber}</div>
                 <div style={colName}>{item.firstName}</div>
                 <div style={colName}>
-                  {isLetterHighlighted && item.lastName.length > 0 ? (
-                    <><span style={{ backgroundColor: '#FFD600', borderRadius: 2 }}>{item.lastName.charAt(0)}</span>{item.lastName.slice(1)}</>
+                  {isPrefixHighlighted && item.lastName.length > 0 ? (
+                    <><span style={{ backgroundColor: '#FFD600', borderRadius: 2 }}>{item.lastName.slice(0, highlightLength)}</span>{item.lastName.slice(highlightLength)}</>
                   ) : (
                     item.lastName
                   )}
@@ -177,6 +180,12 @@ export const MainList = memo(function MainList({
 
           {!loading && rows.length === 0 ? (
             <div style={{ padding: cellPadding, textAlign: 'center', fontSize }}>{t('no_competitors_found')}</div>
+          ) : null}
+
+          {rows.length > 0 ? (
+            <div style={{ padding: cellPadding, textAlign: 'center', fontSize, color: '#666', borderTop: '1px solid #eee' }}>
+              {t('shown_count', { count: rows.length })}
+            </div>
           ) : null}
         </div>
       </Paper>

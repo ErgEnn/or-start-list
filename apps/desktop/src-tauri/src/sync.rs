@@ -660,7 +660,7 @@ mod tests {
         };
 
         apply_cycle_response(&mut db, &payload).expect("apply cycle");
-        let recent = load_recent_registrations(&mut db, "event-1", 10).expect("recent");
+        let recent = load_recent_registrations(&mut db, "event-1").expect("recent");
         let sync_status = load_sync_status_from_db(&mut db).expect("sync status");
 
         assert_eq!(recent.len(), 1);

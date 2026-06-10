@@ -31,7 +31,15 @@ export function RecentsList({ registrations, loading, eventId, onSelectRegistrat
         '&::before': { display: 'none' },
       }}
     >
-      <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 0, '& .MuiAccordionSummary-content': { my: 0.75, alignItems: 'center' } }}>
+      <AccordionSummary
+        expandIcon={<ExpandMoreIcon />}
+        sx={{
+          minHeight: 0,
+          flexDirection: 'row-reverse',
+          '& .MuiAccordionSummary-content': { my: 0.75, alignItems: 'center' },
+          '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': { transform: 'rotate(180deg)' },
+        }}
+      >
         <Typography variant='subtitle2'>
           {t('recent_registrations', { count: visibleRegistrations.length })}
         </Typography>

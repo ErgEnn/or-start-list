@@ -444,10 +444,12 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     setError("");
 
     void desktopSelectEvent(selectedEventId)
-      .then((eventState) => {
-        if (!cancelled) {
-          applyEventState(eventState);
+      .then(async (eventState) => {
+        if (cancelled) {
+          return;
         }
+        applyEventState(eventState);
+        await refreshQuery(latestFilterRef.current, latestSearchQueryRef.current);
       })
       .catch((cause) => {
         if (!cancelled) {
@@ -463,7 +465,7 @@ export function useCompetitorDirectory(deviceConfigRevision = 0): UseCompetitorD
     return () => {
       cancelled = true;
     };
-  }, [applyEventState, loading, selectedEventId]);
+  }, [applyEventState, loading, refreshQuery, selectedEventId]);
 
   return {
     rows,

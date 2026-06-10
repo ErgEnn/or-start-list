@@ -216,15 +216,17 @@ pub fn indexed_competitors_count(db: &mut SqliteConnection) -> Result<i64, Strin
         .count)
 }
 
-pub fn all_filter_competitors_count(db: &mut SqliteConnection) -> Result<i64, String> {
+pub fn all_filter_competitors_count(db: &mut SqliteConnection, event_id: &str) -> Result<i64, String> {
     Ok(sql_query(
         "SELECT COUNT(*) AS count \
          FROM ( \
            SELECT competitor_id FROM payment_group_members \
+             WHERE compensated_events IS NULL OR events_attended < compensated_events \
            UNION \
-           SELECT competitor_id FROM registrations \
+           SELECT competitor_id FROM registrations WHERE event_id = ? \
          )",
     )
+    .bind::<Text, _>(event_id)
     .get_result::<CountRow>(db)
     .map_err(|error| error.to_string())?
     .count)
@@ -463,7 +465,6 @@ fn load_competition_group_selections(
 pub fn load_recent_registrations(
     db: &mut SqliteConnection,
     event_id: &str,
-    limit: i64,
 ) -> Result<Vec<RecentRegistrationRow>, String> {
     if event_id.is_empty() {
         return Ok(Vec::new());
@@ -473,7 +474,7 @@ pub fn load_recent_registrations(
         "SELECT \
            r.registration_id, \
            r.competitor_id, \
-           COALESCE(c.last_name || ' ' || c.first_name, c.eol_number, r.competitor_id) AS competitor_name, \
+           COALESCE(NULLIF(TRIM(c.last_name || ' ' || c.first_name), ''), c.eol_number, r.competitor_id) AS competitor_name, \
            r.course_id, \
            COALESCE(co.name, r.course_id) AS course_name, \
            r.competition_group_name, \
@@ -485,11 +486,9 @@ pub fn load_recent_registrations(
          LEFT JOIN source_competitors c ON c.competitor_id = r.competitor_id \
          LEFT JOIN courses co ON co.event_id = r.event_id AND co.course_id = r.course_id \
          WHERE r.event_id = ? \
-         ORDER BY r.local_seq DESC, r.created_at_device DESC \
-         LIMIT ?",
+         ORDER BY r.local_seq DESC, r.created_at_device DESC",
     )
     .bind::<Text, _>(event_id)
-    .bind::<BigInt, _>(limit)
     .load::<RecentRegistrationRow>(db)
     .map_err(|error| error.to_string())
 }
@@ -530,12 +529,13 @@ pub fn load_event_state(db: &mut SqliteConnection, selected_event_id: &str) -> R
         courses: load_courses(db, selected_event_id)?,
         selected_courses_by_competitor: load_selected_courses(db, selected_event_id)?,
         selected_registrations_by_competitor: load_selected_registrations(db, selected_event_id)?,
-        recent_registrations: load_recent_registrations(db, selected_event_id, 20)?,
+        recent_registrations: load_recent_registrations(db, selected_event_id)?,
     })
 }
 
-pub fn build_competitor_query(filter_id: &str, query: &str) -> String {
+pub fn build_competitor_query(filter_id: &str, query: &str, selected_event_id: &str) -> String {
     let filter_sql = sql_string(filter_id);
+    let event_sql = sql_string(selected_event_id);
     let terms = tokenize_query(query);
     let mut sql = String::from(
         "SELECT c.competitor_id, c.eol_number, c.first_name, c.last_name, c.gender, c.dob, c.club, c.si_card \
@@ -545,25 +545,39 @@ pub fn build_competitor_query(filter_id: &str, query: &str) -> String {
     if filter_id != "all" {
         sql.push_str(
             "INNER JOIN payment_group_members m \
-             ON m.competitor_id = c.competitor_id ",
+             ON m.competitor_id = c.competitor_id \
+             AND (m.compensated_events IS NULL OR m.events_attended < m.compensated_events) ",
         );
     }
 
     let mut where_clauses = Vec::new();
     if filter_id == "all" {
         if terms.is_empty() {
-            where_clauses.push(
-                "(EXISTS (SELECT 1 FROM payment_group_members pgm WHERE pgm.competitor_id = c.competitor_id) \
-                  OR EXISTS (SELECT 1 FROM registrations r WHERE r.competitor_id = c.competitor_id))"
-                    .to_string(),
-            );
+            if selected_event_id.is_empty() {
+                where_clauses.push(
+                    "EXISTS (SELECT 1 FROM payment_group_members pgm \
+                       WHERE pgm.competitor_id = c.competitor_id \
+                       AND (pgm.compensated_events IS NULL OR pgm.events_attended < pgm.compensated_events))"
+                        .to_string(),
+                );
+            } else {
+                where_clauses.push(format!(
+                    "(EXISTS (SELECT 1 FROM payment_group_members pgm \
+                        WHERE pgm.competitor_id = c.competitor_id \
+                        AND (pgm.compensated_events IS NULL OR pgm.events_attended < pgm.compensated_events)) \
+                      OR EXISTS (SELECT 1 FROM registrations r WHERE r.competitor_id = c.competitor_id AND r.event_id = '{}'))",
+                    event_sql
+                ));
+            }
         }
     } else {
         where_clauses.push(format!("m.payment_group_id = '{}'", filter_sql));
     }
 
-    for term in terms {
-        let escaped = sql_like_prefix(&term);
+    let first_term_escaped = terms.first().map(|t| sql_like_prefix(t));
+
+    for term in &terms {
+        let escaped = sql_like_prefix(term);
         where_clauses.push(format!(
             "(LOWER(c.eol_number) LIKE '{escaped}%' ESCAPE '\\' \
               OR LOWER(c.first_name) LIKE '{escaped}%' ESCAPE '\\' \
@@ -579,7 +593,15 @@ pub fn build_competitor_query(filter_id: &str, query: &str) -> String {
         sql.push(' ');
     }
 
-    sql.push_str("ORDER BY c.last_name, c.first_name, c.eol_number LIMIT 300");
+    if let Some(escaped) = first_term_escaped {
+        sql.push_str(&format!(
+            "ORDER BY \
+               CASE WHEN LOWER(c.eol_number) LIKE '{escaped}%' ESCAPE '\\' THEN LENGTH(c.eol_number) ELSE 999999 END ASC, \
+               c.last_name, c.first_name, c.eol_number"
+        ));
+    } else {
+        sql.push_str("ORDER BY c.last_name, c.first_name, c.eol_number");
+    }
     sql
 }
 
@@ -730,7 +752,7 @@ pub fn query_competitors(
     request: DesktopQueryCompetitorsRequest,
 ) -> Result<DesktopQueryCompetitorsResponse, String> {
     let selected_event_id = ensure_selected_event_id(db)?;
-    let base_rows = sql_query(build_competitor_query(&request.filter_id, &request.query))
+    let base_rows = sql_query(build_competitor_query(&request.filter_id, &request.query, &selected_event_id))
         .load::<BaseCompetitorRow>(db)
         .map_err(|error| error.to_string())?;
     let competition_groups = load_competition_groups(db)?;
@@ -771,7 +793,7 @@ pub fn query_competitors(
 
     Ok(DesktopQueryCompetitorsResponse {
         visible_count: rows.len() as i64,
-        grouped_count: all_filter_competitors_count(db)?,
+        grouped_count: all_filter_competitors_count(db, &selected_event_id)?,
         indexed_count: indexed_competitors_count(db)?,
         rows,
     })
@@ -1191,7 +1213,7 @@ pub fn claim_reserved_code(
         courses: load_courses(db, &request.event_id)?,
         selected_courses_by_competitor: load_selected_courses(db, &request.event_id)?,
         selected_registrations_by_competitor: load_selected_registrations(db, &request.event_id)?,
-        recent_registrations: load_recent_registrations(db, &request.event_id, 20)?,
+        recent_registrations: load_recent_registrations(db, &request.event_id)?,
         push_result: None,
     })
 }
@@ -1359,7 +1381,7 @@ pub fn create_registration(
         courses: load_courses(db, &request.event_id)?,
         selected_courses_by_competitor: load_selected_courses(db, &request.event_id)?,
         selected_registrations_by_competitor: load_selected_registrations(db, &request.event_id)?,
-        recent_registrations: load_recent_registrations(db, &request.event_id, 20)?,
+        recent_registrations: load_recent_registrations(db, &request.event_id)?,
         push_result: None,
     })
 }
@@ -1574,7 +1596,7 @@ pub fn update_registration_payment(
         courses: load_courses(db, &request.event_id)?,
         selected_courses_by_competitor: load_selected_courses(db, &request.event_id)?,
         selected_registrations_by_competitor: load_selected_registrations(db, &request.event_id)?,
-        recent_registrations: load_recent_registrations(db, &request.event_id, 20)?,
+        recent_registrations: load_recent_registrations(db, &request.event_id)?,
         push_result: None,
     })
 }
@@ -1789,7 +1811,7 @@ mod tests {
         .expect("create registration");
 
         assert_eq!(response.selected_courses_by_competitor.get("comp-1"), Some(&"course-1".to_string()));
-        let rows = load_recent_registrations(&mut db, "event-1", 10).expect("recent");
+        let rows = load_recent_registrations(&mut db, "event-1").expect("recent");
         assert_eq!(rows[0].competition_group_name, "N21");
         assert_eq!(rows[0].price_cents, 700);
     }

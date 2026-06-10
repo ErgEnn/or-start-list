@@ -64,7 +64,7 @@ export function AllRegistrationsDialog({ open, eventId, onClose, onSelectCompeti
   return (
     <Dialog fullScreen open={open} onClose={onClose}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 1.5 }}>
-        <Typography variant="h6">{t('registered_competitors')}</Typography>
+        <Typography variant="h6">{t('registered_competitors', { count: rows.length })}</Typography>
         <IconButton edge="end" onClick={onClose}>
           <CloseIcon />
         </IconButton>
@@ -81,6 +81,7 @@ export function AllRegistrationsDialog({ open, eventId, onClose, onSelectCompeti
             <Table stickyHeader size="small">
               <TableHead>
                 <TableRow>
+                  <TableCell align="right">{t('index_column')}</TableCell>
                   <TableCell>{t('reg_time')}</TableCell>
                   <TableCell>{t('eol_code')}</TableCell>
                   <TableCell>{t('first_name')}</TableCell>
@@ -90,13 +91,14 @@ export function AllRegistrationsDialog({ open, eventId, onClose, onSelectCompeti
                 </TableRow>
               </TableHead>
               <TableBody>
-                {rows.map((row) => (
+                {rows.map((row, index) => (
                   <TableRow
                     key={row.registrationId}
                     hover
                     onClick={() => { onClose(); onSelectCompetitor(row.competitorId); }}
                     sx={{ cursor: 'pointer' }}
                   >
+                    <TableCell align="right">{rows.length - index}</TableCell>
                     <TableCell>{formatRegistrationTime(row.createdAtDevice)}</TableCell>
                     <TableCell>{row.eolNumber}</TableCell>
                     <TableCell>{row.firstName}</TableCell>

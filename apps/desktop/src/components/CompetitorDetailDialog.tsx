@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import { UNDECIDED_COURSE_ID, PAYMENT_METHODS, type CompetitionGroup, type Course, type DesktopCompetitorRow, type MapPreferenceMember, type PaymentGroup, type PaymentMethodValue, type SelectedRegistrationInfo } from '@or/shared';
 import { desktopUpdateCompetitorData } from '../lib/desktop';
+import { isWithinCompensatedLimit } from '../lib/payment';
 import { t } from '../i18n';
 
 type CompetitorDetailDialogProps = {
@@ -120,7 +121,8 @@ export function CompetitorDetailDialog({
   );
   const existingPaymentGroupId = useMemo(() => {
     for (const group of paymentGroups) {
-      if (group.competitorIds.includes(competitor.competitorId)) {
+      const member = group.competitors.find((m) => m.competitorId === competitor.competitorId);
+      if (member && isWithinCompensatedLimit(member)) {
         return group.paymentGroupId;
       }
     }

@@ -15,6 +15,8 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
       fullWidth
       value={value}
       onChange={(event) => onChange(event.target.value)}
+      type="search"
+      autoComplete="off"
       slotProps={{
         input: {
           endAdornment: value ? (
@@ -28,6 +30,12 @@ export function SearchBar({ value, onChange }: SearchBarProps) {
               </IconButton>
             </InputAdornment>
           ) : undefined,
+        },
+        htmlInput: {
+          inputMode: 'search',
+          autoCorrect: 'off',
+          autoCapitalize: 'off',
+          spellCheck: false,
         },
       }}
     />

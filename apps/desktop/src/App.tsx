@@ -20,8 +20,10 @@ import { getTodayLocalDate } from './lib/date';
 import { useSiReaderStore } from './stores/siReaderStore';
 import type { DesktopCreateRegistrationResponse } from '@or/shared';
 
-function getJumpLetter(lastName: string) {
-  return lastName.trim().charAt(0).toLocaleUpperCase();
+function getJumpKey(lastName: string, length: 1 | 2): string | null {
+  const trimmed = lastName.trim();
+  if (trimmed.length < length) return null;
+  return trimmed.slice(0, length).toLocaleUpperCase();
 }
 
 const ALL_FILTER_ID = 'all';
@@ -66,7 +68,7 @@ export function App() {
     addPaymentGroupMember,
   } = useCompetitorDirectory(deviceConfigRevision);
   const [infoPagesOpen, setInfoPagesOpen] = useState(false);
-  const [selectedJumpLetter, setSelectedJumpLetter] = useState<string | null>(null);
+  const [selectedJumpPrefix, setSelectedJumpPrefix] = useState<string | null>(null);
   const [focusedCompetitor, setFocusedCompetitor] = useState<{ competitorId: string; token: number } | null>(null);
   const [openCompetitorId, setOpenCompetitorId] = useState<{ competitorId: string; token: number } | null>(null);
   const selectedEvent = useMemo(
@@ -76,17 +78,23 @@ export function App() {
   const isEventToday = selectedEvent !== null && selectedEvent.startDate === today;
   const showSearchDobColumn = searchInput.trim().length > 0;
 
-  const jumpTargets = useMemo(() => {
+  const { jumpTargets, subPrefixes } = useMemo(() => {
     const targets = new Map<string, string>();
+    const sub = new Map<string, Set<string>>();
 
     for (const row of rows) {
-      const letter = getJumpLetter(row.lastName);
-      if (letter && !targets.has(letter)) {
-        targets.set(letter, row.competitorId);
+      const first = getJumpKey(row.lastName, 1);
+      if (!first) continue;
+      if (!targets.has(first)) targets.set(first, row.competitorId);
+      const two = getJumpKey(row.lastName, 2);
+      if (two) {
+        if (!targets.has(two)) targets.set(two, row.competitorId);
+        if (!sub.has(first)) sub.set(first, new Set());
+        sub.get(first)!.add(two);
       }
     }
 
-    return targets;
+    return { jumpTargets: targets, subPrefixes: sub };
   }, [rows]);
 
   useEffect(() => {
@@ -115,13 +123,13 @@ export function App() {
   }, [initialPromptDone, settingsConfigured, loading]);
 
   useEffect(() => {
-    if (selectedJumpLetter && !jumpTargets.has(selectedJumpLetter)) {
-      setSelectedJumpLetter(null);
+    if (selectedJumpPrefix && !jumpTargets.has(selectedJumpPrefix)) {
+      setSelectedJumpPrefix(null);
     }
-  }, [jumpTargets, selectedJumpLetter]);
+  }, [jumpTargets, selectedJumpPrefix]);
 
   useEffect(() => {
-    setSelectedJumpLetter(null);
+    setSelectedJumpPrefix(null);
   }, [selectedFilter]);
 
   useEffect(() => {
@@ -145,18 +153,18 @@ export function App() {
   const scrollTarget = useMemo(
     () =>
       focusedCompetitor ??
-      (selectedJumpLetter
+      (selectedJumpPrefix
         ? {
-            competitorId: jumpTargets.get(selectedJumpLetter) ?? '',
+            competitorId: jumpTargets.get(selectedJumpPrefix) ?? '',
             token: jumpScrollToken,
           }
         : null),
-    [focusedCompetitor, selectedJumpLetter, jumpTargets, jumpScrollToken],
+    [focusedCompetitor, selectedJumpPrefix, jumpTargets, jumpScrollToken],
   );
 
   function handleRecentRegistrationClick(competitorId: string) {
     setSelectedFilter(ALL_FILTER_ID);
-    setSelectedJumpLetter(null);
+    setSelectedJumpPrefix(null);
     const token = Date.now();
     setFocusedCompetitor({ competitorId, token });
     setOpenCompetitorId({ competitorId, token });
@@ -164,7 +172,7 @@ export function App() {
 
   function handleOpenCompetitorFromRegistrations(competitorId: string) {
     setSelectedFilter(ALL_FILTER_ID);
-    setSelectedJumpLetter(null);
+    setSelectedJumpPrefix(null);
     const token = Date.now();
     setFocusedCompetitor({ competitorId, token });
     setOpenCompetitorId({ competitorId, token });
@@ -205,11 +213,24 @@ export function App() {
     setEventDialogOpen(false);
   }, [setSelectedEventId]);
 
-  const availableLetters = useMemo(() => new Set(jumpTargets.keys()), [jumpTargets]);
+  const availableLetters = useMemo(() => {
+    const set = new Set<string>();
+    for (const key of jumpTargets.keys()) {
+      if (key.length === 1) set.add(key);
+    }
+    return set;
+  }, [jumpTargets]);
 
-  const handleJump = useCallback((letter: string | null) => {
-    setSelectedJumpLetter(letter);
-    if (letter) {
+  const subPrefixesForSelected = useMemo(() => {
+    if (!selectedJumpPrefix) return [];
+    const first = selectedJumpPrefix.charAt(0);
+    const set = subPrefixes.get(first);
+    return set ? [...set].sort() : [];
+  }, [selectedJumpPrefix, subPrefixes]);
+
+  const handleJump = useCallback((prefix: string | null) => {
+    setSelectedJumpPrefix(prefix);
+    if (prefix) {
       setJumpScrollToken(Date.now());
     }
   }, []);
@@ -265,7 +286,8 @@ export function App() {
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0, gap: '1em' }}>
         <QuickJumpBar
           availableLetters={availableLetters}
-          selectedLetter={selectedJumpLetter}
+          subPrefixesForSelected={subPrefixesForSelected}
+          selectedPrefix={selectedJumpPrefix}
           onJump={handleJump}
         />
         <Box sx={{ flex: 1, minWidth: 0, minHeight: 0 }}>
@@ -279,7 +301,7 @@ export function App() {
             loading={loading || eventLoading}
             scrollTarget={scrollTarget?.competitorId ? scrollTarget : null}
             highlightedCompetitorId={focusedCompetitor?.competitorId ?? null}
-            highlightedLetter={selectedJumpLetter}
+            highlightedPrefix={selectedJumpPrefix}
             courses={courses}
             textScale={textScale}
             selectedCoursesByCompetitor={selectedCoursesByCompetitor}
