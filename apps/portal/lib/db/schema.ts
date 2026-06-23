@@ -256,6 +256,7 @@ export const paymentGroups = pgTable(
     name: text("name").notNull(),
     colorHex: text("color_hex"),
     globalPriceOverride: numeric("global_price_override", { precision: 10, scale: 2 }),
+    autoFromRegistrations: boolean("auto_from_registrations").notNull().default(false),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

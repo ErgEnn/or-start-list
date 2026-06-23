@@ -1,6 +1,6 @@
 "use client";
 
-import { AutoComplete, Button, Card, Input, InputNumber, Space, Table, message } from "antd";
+import { Alert, AutoComplete, Button, Card, Input, InputNumber, Space, Table, Tooltip, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { CheckOutlined, CloseOutlined, DownloadOutlined, EditOutlined, UploadOutlined } from "@ant-design/icons";
 import * as XLSX from "xlsx";
@@ -33,6 +33,8 @@ export default function PaymentGroupCompetitorsPage() {
 
   const [members, setMembers] = useState<PaymentGroupCompetitor[]>([]);
   const [groupName, setGroupName] = useState("");
+  const [autoFromRegistrations, setAutoFromRegistrations] = useState(false);
+  const [autoCount, setAutoCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [apiMessage, contextHolder] = message.useMessage();
 
@@ -49,12 +51,19 @@ export default function PaymentGroupCompetitorsPage() {
     const payload = (await response.json()) as {
       paymentGroup: {
         name: string;
+        autoFromRegistrations: boolean;
+        competitorsCount: number;
         competitors: PaymentGroupCompetitor[];
       };
     };
     setMembers(payload.paymentGroup.competitors);
     setGroupName(payload.paymentGroup.name);
+    setAutoFromRegistrations(payload.paymentGroup.autoFromRegistrations);
+    setAutoCount(payload.paymentGroup.competitorsCount);
     setLoading(false);
+    // Drop cached tooltip data so it re-fetches against the refreshed member list.
+    compEventsRequested.current.clear();
+    setCompEvents({});
   }, [paymentGroupId]);
 
   useEffect(() => {
@@ -81,6 +90,39 @@ export default function PaymentGroupCompetitorsPage() {
     }
     await loadMembers();
   }
+
+  // Lazily-loaded list of event names where this group's compensation was applied, keyed by
+  // competitorId. Fetched on first tooltip hover.
+  const [compEvents, setCompEvents] = useState<Record<string, { loading: boolean; names: string[] | null }>>({});
+  const compEventsRequested = useRef<Set<string>>(new Set());
+
+  const loadCompEvents = useCallback(
+    async (competitorId: string) => {
+      if (compEventsRequested.current.has(competitorId)) return; // already loading or loaded
+      compEventsRequested.current.add(competitorId);
+      setCompEvents((prev) => ({ ...prev, [competitorId]: { loading: true, names: null } }));
+
+      const response = await fetch(
+        `/api/admin/payment-groups/${encodeURIComponent(paymentGroupId)}/competitors/${encodeURIComponent(competitorId)}/compensated-events`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        compEventsRequested.current.delete(competitorId); // allow retry on next hover
+        setCompEvents((prev) => {
+          const next = { ...prev };
+          delete next[competitorId];
+          return next;
+        });
+        return;
+      }
+      const payload = (await response.json()) as { events: Array<{ name: string }> };
+      setCompEvents((prev) => ({
+        ...prev,
+        [competitorId]: { loading: false, names: payload.events.map((e) => e.name) },
+      }));
+    },
+    [paymentGroupId],
+  );
 
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editingPriceValue, setEditingPriceValue] = useState<number | null>(null);
@@ -227,6 +269,9 @@ export default function PaymentGroupCompetitorsPage() {
       title: t("competitors.fullName"),
       key: "name",
       width: 200,
+      defaultSortOrder: "ascend",
+      sorter: (a, b) =>
+        (a.lastName ?? "").localeCompare(b.lastName ?? "") || (a.firstName ?? "").localeCompare(b.firstName ?? ""),
       render: (_, row) => competitorName({ firstName: row.firstName, lastName: row.lastName }),
     },
     { title: t("competitors.club"), dataIndex: "club", key: "club", width: 180 },
@@ -235,6 +280,20 @@ export default function PaymentGroupCompetitorsPage() {
       dataIndex: "eventsAttended",
       key: "eventsAttended",
       width: 80,
+      render: (value: number, row) => {
+        if (!value) return value;
+        const entry = compEvents[row.competitorId];
+        const title = !entry || entry.loading
+          ? t("paymentGroups.loadingEvents")
+          : entry.names && entry.names.length > 0
+            ? <div>{entry.names.map((name, i) => <div key={i}>{name}</div>)}</div>
+            : t("paymentGroups.noCompensatedEvents");
+        return (
+          <Tooltip title={title} onOpenChange={(open) => open && loadCompEvents(row.competitorId)}>
+            <span style={{ cursor: "help", textDecoration: "underline dotted" }}>{value}</span>
+          </Tooltip>
+        );
+      },
     },
     {
       title: t("paymentGroups.compensatedEvents"),
@@ -327,6 +386,20 @@ export default function PaymentGroupCompetitorsPage() {
     setSearchInput("");
   }
 
+  if (!loading && autoFromRegistrations) {
+    return (
+      <>
+        {contextHolder}
+        <Alert
+          type="info"
+          showIcon
+          message={t("paymentGroups.autoMembersTitle")}
+          description={t("paymentGroups.autoMembersDescription").replace("{count}", String(autoCount))}
+        />
+      </>
+    );
+  }
+
   return (
     <>
       {contextHolder}
@@ -363,6 +436,14 @@ export default function PaymentGroupCompetitorsPage() {
           columns={memberColumns}
           locale={{ emptyText: t("competitors.empty") }}
           scroll={{ x: 830 }}
+          onRow={(row) => ({
+            // Gray out competitors who have used up their compensation. A null limit means
+            // unlimited, so it is never grayed out.
+            style:
+              row.compensatedEvents != null && row.eventsAttended >= row.compensatedEvents
+                ? { opacity: 0.45 }
+                : undefined,
+          })}
         />
       </Card>
     </>

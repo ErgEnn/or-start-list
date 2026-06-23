@@ -1,4 +1,4 @@
-import { asc, countDistinct, desc, eq } from "drizzle-orm";
+import { asc, countDistinct, desc, eq, like } from "drizzle-orm";
 import type {
   CompetitionGroupsResponse,
   DeviceSyncCycleRequest,
@@ -25,13 +25,14 @@ async function loadEventsSnapshot(client: DbLike) {
 }
 
 async function loadPaymentGroupsSnapshot(client: DbLike): Promise<PaymentGroupsResponse["paymentGroups"]> {
-  const [groupRows, memberRows, eventCountRows] = await Promise.all([
+  const [groupRows, memberRows, eventCountRows, compensationCountRows] = await Promise.all([
     client
       .select({
         paymentGroupId: paymentGroups.paymentGroupId,
         name: paymentGroups.name,
         colorHex: paymentGroups.colorHex,
         globalPriceOverride: paymentGroups.globalPriceOverride,
+        autoFromRegistrations: paymentGroups.autoFromRegistrations,
         sortOrder: paymentGroups.sortOrder,
       })
       .from(paymentGroups)
@@ -45,6 +46,7 @@ async function loadPaymentGroupsSnapshot(client: DbLike): Promise<PaymentGroupsR
       })
       .from(paymentGroupCompetitors)
       .orderBy(asc(paymentGroupCompetitors.paymentGroupId), asc(paymentGroupCompetitors.competitorId)),
+    // Total distinct events per competitor — used for "auto from registrations" group membership.
     client
       .select({
         competitorId: registrations.competitorId,
@@ -52,15 +54,26 @@ async function loadPaymentGroupsSnapshot(client: DbLike): Promise<PaymentGroupsR
       })
       .from(registrations)
       .groupBy(registrations.competitorId),
+    // Compensated events used per (competitor, payment group): distinct events where the group
+    // paid, recorded as payment_method = `other(<group name>)`.
+    client
+      .select({
+        competitorId: registrations.competitorId,
+        paymentMethod: registrations.paymentMethod,
+        eventCount: countDistinct(registrations.eventId).mapWith(Number),
+      })
+      .from(registrations)
+      .where(like(registrations.paymentMethod, "other(%"))
+      .groupBy(registrations.competitorId, registrations.paymentMethod),
   ]);
 
-  const eventCountMap = new Map<string, number>();
-  for (const row of eventCountRows) {
-    eventCountMap.set(row.competitorId, row.eventCount);
+  const compensationCountMap = new Map<string, number>();
+  for (const row of compensationCountRows) {
+    compensationCountMap.set(`${row.competitorId}|${row.paymentMethod}`, row.eventCount);
   }
 
   const competitorIdsByGroup = new Map<string, string[]>();
-  const competitorsByGroup = new Map<string, Array<{ competitorId: string; priceOverrideCents: number | null; compensatedEvents: number | null; eventsAttended: number }>>();
+  const competitorsByGroup = new Map<string, Array<{ competitorId: string; priceOverrideCents: number | null; compensatedEvents: number | null }>>();
   for (const row of memberRows) {
     const current = competitorIdsByGroup.get(row.paymentGroupId) ?? [];
     current.push(row.competitorId);
@@ -71,20 +84,35 @@ async function loadPaymentGroupsSnapshot(client: DbLike): Promise<PaymentGroupsR
       competitorId: row.competitorId,
       priceOverrideCents: moneyFromDb(row.priceOverrideCents),
       compensatedEvents: row.compensatedEvents,
-      eventsAttended: eventCountMap.get(row.competitorId) ?? 0,
     });
     competitorsByGroup.set(row.paymentGroupId, competitorRows);
   }
 
+  // An "auto from registrations" group dynamically contains everyone who has competed in any
+  // previous event, with no price overrides. Its membership is resolved here from the distinct
+  // registration set instead of from paymentGroupCompetitors.
+  const autoCompetitorIds = eventCountRows.map((row: { competitorId: string; eventCount: number }) => row.competitorId);
+  const autoMembers = eventCountRows.map((row: { competitorId: string; eventCount: number }) => ({
+    competitorId: row.competitorId,
+    priceOverrideCents: null,
+    compensatedEvents: null,
+    eventsAttended: row.eventCount,
+  }));
+
   return paymentGroupsResponseSchema.parse({
-    paymentGroups: groupRows.map((group: { paymentGroupId: string; name: string; colorHex: string | null; globalPriceOverride: unknown; sortOrder: number }) => ({
+    paymentGroups: groupRows.map((group: { paymentGroupId: string; name: string; colorHex: string | null; globalPriceOverride: unknown; autoFromRegistrations: boolean; sortOrder: number }) => ({
       paymentGroupId: group.paymentGroupId,
       name: group.name,
       colorHex: group.colorHex,
-      globalPriceOverride: moneyFromDb(group.globalPriceOverride),
+      globalPriceOverride: group.autoFromRegistrations ? null : moneyFromDb(group.globalPriceOverride),
       sortOrder: group.sortOrder,
-      competitorIds: competitorIdsByGroup.get(group.paymentGroupId) ?? [],
-      competitors: competitorsByGroup.get(group.paymentGroupId) ?? [],
+      competitorIds: group.autoFromRegistrations ? autoCompetitorIds : competitorIdsByGroup.get(group.paymentGroupId) ?? [],
+      competitors: group.autoFromRegistrations
+        ? autoMembers
+        : (competitorsByGroup.get(group.paymentGroupId) ?? []).map((member) => ({
+            ...member,
+            eventsAttended: compensationCountMap.get(`${member.competitorId}|other(${group.name})`) ?? 0,
+          })),
     })),
   }).paymentGroups;
 }

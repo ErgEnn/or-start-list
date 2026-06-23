@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, countDistinct, desc, eq, sql } from "drizzle-orm";
+import { asc, countDistinct, desc, eq, like, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { withTransaction } from "@/lib/db";
 import { paymentGroupCompetitors, paymentGroups, registrations, sourceCompetitors } from "@/lib/db/schema";
@@ -16,6 +16,7 @@ type CreatePaymentGroupBody = {
   name?: unknown;
   colorHex?: unknown;
   globalPriceOverride?: unknown;
+  autoFromRegistrations?: unknown;
   sortOrder?: unknown;
   competitors?: unknown;
 };
@@ -25,6 +26,7 @@ type GroupRow = {
   name: string;
   colorHex: string | null;
   globalPriceOverride: number | null;
+  autoFromRegistrations: boolean;
   sortOrder: number;
   createdAt: Date;
   updatedAt: Date;
@@ -43,6 +45,7 @@ type GroupMemberRow = {
 
 type EventCountRow = {
   competitorId: string;
+  paymentMethod: string;
   eventCount: number;
 };
 
@@ -121,12 +124,20 @@ export async function GET() {
         name: paymentGroups.name,
         colorHex: paymentGroups.colorHex,
         globalPriceOverride: paymentGroups.globalPriceOverride,
+        autoFromRegistrations: paymentGroups.autoFromRegistrations,
         sortOrder: paymentGroups.sortOrder,
         createdAt: paymentGroups.createdAt,
         updatedAt: paymentGroups.updatedAt,
       })
       .from(paymentGroups)
       .orderBy(desc(paymentGroups.sortOrder), asc(paymentGroups.name), asc(paymentGroups.paymentGroupId))) as GroupRow[];
+
+    // Auto groups have no rows in paymentGroupCompetitors; their member count is the distinct
+    // set of competitors who have ever registered.
+    const hasAutoGroup = groups.some((g) => g.autoFromRegistrations);
+    const autoCompetitorCount = hasAutoGroup
+      ? (await tx.select({ count: countDistinct(registrations.competitorId).mapWith(Number) }).from(registrations))[0]?.count ?? 0
+      : 0;
 
     const competitors = (await tx
       .select({
@@ -150,21 +161,25 @@ export async function GET() {
 
     const allCompetitorIds = [...new Set(competitors.map((c) => c.competitorId))];
 
+    // "Compensated events used" per member = distinct events the competitor registered for
+    // while a payment group paid for them, recorded as payment_method = `other(<group name>)`.
+    // Counted per (competitor, payment_method) so each group only sees its own usage.
     const eventCounts: EventCountRow[] =
       allCompetitorIds.length > 0
         ? await tx
             .select({
               competitorId: registrations.competitorId,
+              paymentMethod: registrations.paymentMethod,
               eventCount: countDistinct(registrations.eventId).mapWith(Number),
             })
             .from(registrations)
-            .where(sql`${registrations.competitorId} IN ${allCompetitorIds}`)
-            .groupBy(registrations.competitorId)
+            .where(sql`${registrations.competitorId} IN ${allCompetitorIds} AND ${like(registrations.paymentMethod, "other(%")}`)
+            .groupBy(registrations.competitorId, registrations.paymentMethod)
         : [];
 
-    const eventCountMap = new Map<string, number>();
+    const compensationCountMap = new Map<string, number>();
     for (const row of eventCounts) {
-      eventCountMap.set(row.competitorId, row.eventCount);
+      compensationCountMap.set(`${row.competitorId}|${row.paymentMethod}`, row.eventCount);
     }
 
     const competitorsByGroup = new Map<string, typeof competitors>();
@@ -175,6 +190,22 @@ export async function GET() {
     }
 
     return groups.map((group) => {
+      if (group.autoFromRegistrations) {
+        // Membership is dynamic; the editable member list is not surfaced here.
+        return {
+          paymentGroupId: group.paymentGroupId,
+          name: group.name,
+          colorHex: group.colorHex,
+          globalPriceOverride: null,
+          autoFromRegistrations: true,
+          sortOrder: group.sortOrder,
+          createdAt: group.createdAt,
+          updatedAt: group.updatedAt,
+          competitorsCount: autoCompetitorCount,
+          competitors: [],
+        };
+      }
+
       const members = (competitorsByGroup.get(group.paymentGroupId) ?? []).map((member) => ({
         competitorId: member.competitorId,
         priceOverrideCents: member.priceOverrideCents,
@@ -190,6 +221,7 @@ export async function GET() {
         name: group.name,
         colorHex: group.colorHex,
         globalPriceOverride: moneyFromDb(group.globalPriceOverride),
+        autoFromRegistrations: false,
         sortOrder: group.sortOrder,
         createdAt: group.createdAt,
         updatedAt: group.updatedAt,
@@ -198,7 +230,7 @@ export async function GET() {
           ...member,
           priceOverrideCents: moneyFromDb(member.priceOverrideCents),
           compensatedEvents: member.compensatedEvents,
-          eventsAttended: eventCountMap.get(member.competitorId) ?? 0,
+          eventsAttended: compensationCountMap.get(`${member.competitorId}|other(${group.name})`) ?? 0,
         })),
       };
     });
@@ -217,9 +249,11 @@ export async function POST(request: NextRequest) {
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const colorHex = normalizeColorHex(body.colorHex);
-  const globalPriceOverride = parseOptionalMoney(body.globalPriceOverride);
+  const autoFromRegistrations = body.autoFromRegistrations === true;
+  // Auto groups carry no price overrides and no manual members.
+  const globalPriceOverride = autoFromRegistrations ? null : parseOptionalMoney(body.globalPriceOverride);
   const sortOrder = typeof body.sortOrder === "number" && Number.isInteger(body.sortOrder) ? body.sortOrder : 0;
-  const competitors = normalizeCompetitors(body.competitors);
+  const competitors = autoFromRegistrations ? [] : normalizeCompetitors(body.competitors);
 
   if (!name || colorHex === "invalid" || globalPriceOverride === "invalid" || competitors === null) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
@@ -233,6 +267,7 @@ export async function POST(request: NextRequest) {
       name,
       colorHex,
       globalPriceOverride: globalPriceOverride === null ? null : toMoneyDb(globalPriceOverride),
+      autoFromRegistrations,
       sortOrder,
     });
 

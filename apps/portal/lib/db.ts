@@ -227,6 +227,7 @@ async function createSchema(): Promise<void> {
     )
   `);
   await pool.query(`ALTER TABLE payment_groups ADD COLUMN IF NOT EXISTS sort_order integer NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE payment_groups ADD COLUMN IF NOT EXISTS auto_from_registrations boolean NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE payment_groups RENAME COLUMN global_price_override_cents TO global_price_override`).catch(() => {});
   await pool.query(`CREATE INDEX IF NOT EXISTS payment_groups_name_idx ON payment_groups(name)`);
   await pool.query(`

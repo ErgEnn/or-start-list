@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Input, InputNumber, Modal, Space, Statistic, Table, message } from "antd";
+import { Button, Card, Checkbox, Input, InputNumber, Modal, Space, Statistic, Table, Tag, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import Paragraph from "antd/es/typography/Paragraph";
 import Title from "antd/es/typography/Title";
@@ -14,6 +14,7 @@ type PaymentGroupRow = {
   name: string;
   colorHex: string | null;
   globalPriceOverride: number | null;
+  autoFromRegistrations: boolean;
   competitorsCount: number;
 };
 
@@ -28,6 +29,7 @@ export default function PaymentGroupsPage() {
   const [groupName, setGroupName] = useState("");
   const [colorHex, setColorHex] = useState("");
   const [globalPriceOverride, setGlobalPriceOverrideCents] = useState<number | null>(null);
+  const [autoFromRegistrations, setAutoFromRegistrations] = useState(false);
   const [sortOrder, setSortOrder] = useState(0);
 
   const [apiMessage, contextHolder] = message.useMessage();
@@ -53,6 +55,7 @@ export default function PaymentGroupsPage() {
     setGroupName("");
     setColorHex("");
     setGlobalPriceOverrideCents(null);
+    setAutoFromRegistrations(false);
     setSortOrder(0);
     setModalOpen(true);
   }
@@ -72,7 +75,8 @@ export default function PaymentGroupsPage() {
         body: JSON.stringify({
           name,
           colorHex: colorHex.trim() || null,
-          globalPriceOverride,
+          globalPriceOverride: autoFromRegistrations ? null : globalPriceOverride,
+          autoFromRegistrations,
           sortOrder,
           competitors: [],
         }),
@@ -97,7 +101,17 @@ export default function PaymentGroupsPage() {
 
 
   const groupsColumns: ColumnsType<PaymentGroupRow> = [
-    { title: t("paymentGroups.name"), dataIndex: "name", key: "name" },
+    {
+      title: t("paymentGroups.name"),
+      dataIndex: "name",
+      key: "name",
+      render: (value: string, row) => (
+        <Space size={8}>
+          {value}
+          {row.autoFromRegistrations && <Tag color="blue">{t("paymentGroups.autoTag")}</Tag>}
+        </Space>
+      ),
+    },
     {
       title: t("paymentGroups.color"),
       dataIndex: "colorHex",
@@ -200,10 +214,17 @@ export default function PaymentGroupsPage() {
             maxLength={7}
             allowClear
           />
+          <Checkbox checked={autoFromRegistrations} onChange={(event) => setAutoFromRegistrations(event.target.checked)}>
+            {t("paymentGroups.autoFromRegistrations")}
+          </Checkbox>
+          {autoFromRegistrations && (
+            <Paragraph style={{ margin: 0, color: "#595959", fontSize: 12 }}>{t("paymentGroups.autoHint")}</Paragraph>
+          )}
           <Space.Compact style={{ width: "100%" }}>
             <Input style={{ width: 40, pointerEvents: "none", textAlign: "center" }} value="€" readOnly tabIndex={-1} />
             <InputNumber
-              value={globalPriceOverride}
+              value={autoFromRegistrations ? null : globalPriceOverride}
+              disabled={autoFromRegistrations}
               min={0}
               precision={2}
               onChange={(value) => setGlobalPriceOverrideCents(typeof value === "number" ? value : null)}

@@ -15,6 +15,7 @@ type UpdatePaymentGroupBody = {
   name?: unknown;
   colorHex?: unknown;
   globalPriceOverride?: unknown;
+  autoFromRegistrations?: unknown;
   sortOrder?: unknown;
   competitors?: unknown;
 };
@@ -96,6 +97,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ paymentGr
         name: paymentGroups.name,
         colorHex: paymentGroups.colorHex,
         globalPriceOverride: paymentGroups.globalPriceOverride,
+        autoFromRegistrations: paymentGroups.autoFromRegistrations,
         sortOrder: paymentGroups.sortOrder,
       })
       .from(paymentGroups)
@@ -107,6 +109,23 @@ export async function GET(_: NextRequest, context: { params: Promise<{ paymentGr
     }
 
     const group = groups[0];
+
+    if (group.autoFromRegistrations) {
+      // Membership is dynamic: everyone who has ever registered. Return the count only.
+      const counted = await tx
+        .select({ count: countDistinct(registrations.competitorId).mapWith(Number) })
+        .from(registrations);
+      return {
+        paymentGroupId: group.paymentGroupId,
+        name: group.name,
+        colorHex: group.colorHex,
+        globalPriceOverride: null,
+        autoFromRegistrations: true,
+        sortOrder: group.sortOrder,
+        competitorsCount: counted[0]?.count ?? 0,
+        competitors: [],
+      };
+    }
 
     const competitors = await tx
       .select({
@@ -133,6 +152,9 @@ export async function GET(_: NextRequest, context: { params: Promise<{ paymentGr
 
     const competitorIds = competitors.map((c) => c.competitorId);
 
+    // "Compensated events used" = distinct events this competitor registered for while this
+    // payment group paid for them. The desktop records that as payment_method = `other(<group name>)`.
+    const compensationTag = `other(${group.name})`;
     const eventCounts =
       competitorIds.length > 0
         ? await tx
@@ -141,7 +163,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ paymentGr
               eventCount: countDistinct(registrations.eventId).mapWith(Number),
             })
             .from(registrations)
-            .where(sql`${registrations.competitorId} IN ${competitorIds}`)
+            .where(sql`${registrations.competitorId} IN ${competitorIds} AND ${registrations.paymentMethod} = ${compensationTag}`)
             .groupBy(registrations.competitorId)
         : [];
 
@@ -155,6 +177,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ paymentGr
       name: group.name,
       colorHex: group.colorHex,
       globalPriceOverride: moneyFromDb(group.globalPriceOverride),
+      autoFromRegistrations: false,
       sortOrder: group.sortOrder,
       competitorsCount: competitors.length,
       competitors: competitors.map((c) => ({
@@ -188,9 +211,11 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ pay
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const colorHex = normalizeColorHex(body.colorHex);
-  const globalPriceOverride = parseOptionalMoney(body.globalPriceOverride);
+  const autoFromRegistrations = body.autoFromRegistrations === true;
+  // Auto groups carry no price overrides and no manual members.
+  const globalPriceOverride = autoFromRegistrations ? null : parseOptionalMoney(body.globalPriceOverride);
   const sortOrder = typeof body.sortOrder === "number" && Number.isInteger(body.sortOrder) ? body.sortOrder : 0;
-  const hasCompetitors = body.competitors !== undefined;
+  const hasCompetitors = !autoFromRegistrations && body.competitors !== undefined;
   const competitors = hasCompetitors ? normalizeCompetitors(body.competitors) : [];
 
   if (!name || colorHex === "invalid" || globalPriceOverride === "invalid" || (hasCompetitors && competitors === null)) {
@@ -214,12 +239,16 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ pay
         name,
         colorHex,
         globalPriceOverride: globalPriceOverride === null ? null : toMoneyDb(globalPriceOverride),
+        autoFromRegistrations,
         sortOrder,
         updatedAt: new Date(),
       })
       .where(eq(paymentGroups.paymentGroupId, paymentGroupId));
 
-    if (hasCompetitors && competitors) {
+    if (autoFromRegistrations) {
+      // Switching a group to auto-mode drops any previously stored manual members.
+      await tx.delete(paymentGroupCompetitors).where(eq(paymentGroupCompetitors.paymentGroupId, paymentGroupId));
+    } else if (hasCompetitors && competitors) {
       await tx.delete(paymentGroupCompetitors).where(eq(paymentGroupCompetitors.paymentGroupId, paymentGroupId));
 
       for (const member of competitors) {

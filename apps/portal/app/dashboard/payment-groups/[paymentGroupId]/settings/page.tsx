@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Input, InputNumber, Space, message } from "antd";
+import { Button, Card, Checkbox, Input, InputNumber, Space, Typography, message } from "antd";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useT } from "@/lib/i18n-client";
@@ -10,6 +10,7 @@ type PaymentGroupData = {
   name: string;
   colorHex: string | null;
   globalPriceOverride: number | null;
+  autoFromRegistrations: boolean;
   sortOrder: number;
 };
 
@@ -24,6 +25,7 @@ export default function PaymentGroupSettingsPage() {
   const [groupName, setGroupName] = useState("");
   const [colorHex, setColorHex] = useState("");
   const [globalPriceOverride, setGlobalPriceOverrideCents] = useState<number | null>(null);
+  const [autoFromRegistrations, setAutoFromRegistrations] = useState(false);
   const [sortOrder, setSortOrder] = useState(0);
   const [apiMessage, contextHolder] = message.useMessage();
 
@@ -43,6 +45,7 @@ export default function PaymentGroupSettingsPage() {
       setGroupName(group.name);
       setColorHex(group.colorHex ?? "");
       setGlobalPriceOverrideCents(group.globalPriceOverride);
+      setAutoFromRegistrations(group.autoFromRegistrations);
       setSortOrder(group.sortOrder);
       setLoading(false);
     }
@@ -64,7 +67,8 @@ export default function PaymentGroupSettingsPage() {
         body: JSON.stringify({
           name,
           colorHex: colorHex.trim() || null,
-          globalPriceOverride,
+          globalPriceOverride: autoFromRegistrations ? null : globalPriceOverride,
+          autoFromRegistrations,
           sortOrder,
         }),
       });
@@ -134,11 +138,22 @@ export default function PaymentGroupSettingsPage() {
             </Space>
           </div>
           <div>
+            <Checkbox checked={autoFromRegistrations} onChange={(event) => setAutoFromRegistrations(event.target.checked)}>
+              {t("paymentGroups.autoFromRegistrations")}
+            </Checkbox>
+            {autoFromRegistrations && (
+              <Typography.Paragraph style={{ margin: "4px 0 0", color: "#595959", fontSize: 12 }}>
+                {t("paymentGroups.autoHint")}
+              </Typography.Paragraph>
+            )}
+          </div>
+          <div>
             <div style={{ marginBottom: 4, fontWeight: 500 }}>{t("paymentGroups.globalPriceOverride")}</div>
             <Space.Compact>
               <Input style={{ width: 40, pointerEvents: "none", textAlign: "center" }} value="€" readOnly tabIndex={-1} />
               <InputNumber
-                value={globalPriceOverride}
+                value={autoFromRegistrations ? null : globalPriceOverride}
+                disabled={autoFromRegistrations}
                 min={0}
                 precision={2}
                 onChange={(value) => setGlobalPriceOverrideCents(typeof value === "number" ? value : null)}
