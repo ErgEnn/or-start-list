@@ -119,8 +119,12 @@ export function CompetitorDetailDialog({
   const [localCourseId, setLocalCourseId] = useState(
     selectedCourseId ?? mapPreferredCourseId,
   );
+  // The manual payment group that pays for this competitor. Auto groups (auto-filled from prior
+  // registrations) are skipped: they carry no overrides and don't pay for anyone, so they must
+  // not drive the payment method or the group tag — only manual groups do.
   const existingPaymentGroupId = useMemo(() => {
     for (const group of paymentGroups) {
+      if (group.autoFromRegistrations) continue;
       const member = group.competitors.find((m) => m.competitorId === competitor.competitorId);
       if (member && isWithinCompensatedLimit(member)) {
         return group.paymentGroupId;
@@ -129,17 +133,11 @@ export function CompetitorDetailDialog({
     return null;
   }, [paymentGroups, competitor.competitorId]);
 
-  const paymentGroupOverridesTo0 = useMemo(() => {
-    if (!existingPaymentGroupId) return false;
-    const group = paymentGroups.find((g) => g.paymentGroupId === existingPaymentGroupId);
-    if (!group) return false;
-    const member = group.competitors.find((m) => m.competitorId === competitor.competitorId);
-    if (member?.priceOverrideCents === 0) return true;
-    if (group.globalPriceOverride != null && Math.round(group.globalPriceOverride * 100) === 0) return true;
-    return false;
-  }, [existingPaymentGroupId, paymentGroups, competitor.competitorId]);
-
-  const rawPaymentMethod = selectedRegistration?.paymentMethod ?? (paymentGroupOverridesTo0 ? 'other' : 'cash');
+  // A competitor within a manual payment group's compensation limit is paid for by that group,
+  // whether the compensation is full (€0) or partial (e.g. €2). Preselect "other" so the
+  // registration is tagged other(GroupName) and counts against the compensation cap.
+  // Full-vs-partial compensation only affects the price, never the payment method.
+  const rawPaymentMethod = selectedRegistration?.paymentMethod ?? (existingPaymentGroupId ? 'other' : 'cash');
   const initialPaymentMethod = (rawPaymentMethod.startsWith('other(') ? 'other' : rawPaymentMethod) as PaymentMethodValue;
   const initialPaidPriceCents = selectedRegistration?.paidPriceCents ?? (competitor.priceCents ?? 0);
   const initialIsCustomPrice = selectedRegistration != null && selectedRegistration.paidPriceCents !== (competitor.priceCents ?? 0);
@@ -170,20 +168,49 @@ export function CompetitorDetailDialog({
   const competitionGroupChanged = localCompetitionGroup !== competitor.selectedCompetitionGroupName;
   const courseChanged = localCourseId !== selectedCourseId;
   const paymentMethodChanged = localPaymentMethod !== initialPaymentMethod;
+  // Mirror the Rust find_effective_price: the effective override is the LOWEST override across
+  // every group the competitor belongs to (within its compensation limit), not just one group.
+  // Within a group a per-member override takes precedence over the group-wide override. Both
+  // values are stored in euros (despite the priceOverrideCents name), so convert to cents here.
+  // Auto groups carry no overrides, so they never contribute a candidate.
   const paymentGroupPriceOverride = useMemo(() => {
-    const groupId = localPaymentGroupId || existingPaymentGroupId;
-    if (!groupId) return null;
-    const group = paymentGroups.find((g) => g.paymentGroupId === groupId);
-    return group?.globalPriceOverride != null ? Math.round(group.globalPriceOverride * 100) : null;
-  }, [localPaymentGroupId, existingPaymentGroupId, paymentGroups]);
+    const overrideFor = (group: PaymentGroup, member: PaymentGroup['competitors'][number] | undefined): number | null => {
+      if (member?.priceOverrideCents != null) return Math.round(member.priceOverrideCents * 100);
+      if (group.globalPriceOverride != null) return Math.round(group.globalPriceOverride * 100);
+      return null;
+    };
+    const candidates: number[] = [];
+    for (const group of paymentGroups) {
+      const member = group.competitors.find((m) => m.competitorId === competitor.competitorId);
+      if (member && isWithinCompensatedLimit(member)) {
+        const override = overrideFor(group, member);
+        if (override != null) candidates.push(override);
+      }
+    }
+    // A group chosen manually in this dialog but not yet persisted as membership.
+    if (localPaymentGroupId) {
+      const group = paymentGroups.find((g) => g.paymentGroupId === localPaymentGroupId);
+      if (group && !group.competitors.some((m) => m.competitorId === competitor.competitorId)) {
+        const override = overrideFor(group, undefined);
+        if (override != null) candidates.push(override);
+      }
+    }
+    return candidates.length > 0 ? Math.min(...candidates) : null;
+  }, [localPaymentGroupId, paymentGroups, competitor.competitorId]);
 
   const groupPriceCents = selectedGroupPriceCents ?? competitor.priceCents ?? 0;
-  const basePriceCents = paymentGroupPriceOverride != null
+  // The calculated "Price" is always the full competition-group price, regardless of any payment
+  // group discount — the discount is a compensation the group pays, not a change to the fee.
+  const fullPriceCents = groupPriceCents;
+  // The compensated (discounted) price only applies when the payment group actually pays, i.e. the
+  // payment method is "other". For any other method the competitor pays the full price themselves.
+  const compensatedPriceCents = paymentGroupPriceOverride != null
     ? Math.min(paymentGroupPriceOverride, groupPriceCents)
     : groupPriceCents;
+  const defaultPaidPriceCents = localPaymentMethod === 'other' ? compensatedPriceCents : fullPriceCents;
   const effectivePaidPriceCents = useCustomPrice
     ? Math.round((Number.parseFloat(localPaidPriceInput) || 0) * 100)
-    : basePriceCents;
+    : defaultPaidPriceCents;
   const priceChanged = effectivePaidPriceCents !== initialPaidPriceCents;
   const paymentGroupChanged = localPaymentGroupId !== '';
   const hasChanges = competitionGroupChanged || courseChanged || paymentMethodChanged || priceChanged || paymentGroupChanged;
@@ -421,8 +448,8 @@ export function CompetitorDetailDialog({
             {courseError ? <Typography variant="caption" color="error">{courseError}</Typography> : null}
           </Box>
 
-          {basePriceCents > 0 ? (
-            <DetailRow label={t('price')} value={formatPrice(basePriceCents)} fontSize={scaledFontSize} />
+          {fullPriceCents > 0 ? (
+            <DetailRow label={t('full_price')} value={formatPrice(fullPriceCents)} fontSize={scaledFontSize} />
           ) : null}
 
           <Box>
@@ -497,14 +524,14 @@ export function CompetitorDetailDialog({
               onChange={(_, value: string | null) => {
                 if (value === 'custom') {
                   setUseCustomPrice(true);
-                  setLocalPaidPriceInput((basePriceCents / 100).toFixed(2));
+                  setLocalPaidPriceInput((defaultPaidPriceCents / 100).toFixed(2));
                 } else if (value === 'default') {
                   setUseCustomPrice(false);
                 }
               }}
             >
               <ToggleButton value="default" sx={{ fontSize: scaledFontSize, lineHeight: 1, flexGrow: 1 }}>
-                {formatPrice(basePriceCents)}
+                {formatPrice(defaultPaidPriceCents)}
               </ToggleButton>
               <ToggleButton value="custom" sx={{ fontSize: scaledFontSize, lineHeight: 1, flexGrow: 1 }}>
                 {t('payment_other')}

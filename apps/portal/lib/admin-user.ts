@@ -25,14 +25,21 @@ export async function ensureDefaultAdminUser() {
 
   if (existing.length === 0) {
     const { hash, salt } = hashPassword(DEFAULT_ADMIN.password);
-    await db.insert(adminUsers).values({
-      id: DEFAULT_ADMIN.id,
-      username: DEFAULT_ADMIN.username,
-      passwordHash: hash,
-      passwordSalt: salt,
-      displayName: DEFAULT_ADMIN.displayName,
-      updatedAt: new Date(),
-    });
+    // Do nothing if a row already exists for the fixed id or username. The existence check above
+    // is by username, but the id is fixed, so a renamed/reconfigured admin would otherwise cause a
+    // primary-key violation here. onConflictDoNothing also makes this safe against concurrent
+    // bootstraps across serverless instances (the in-memory flag doesn't span processes).
+    await db
+      .insert(adminUsers)
+      .values({
+        id: DEFAULT_ADMIN.id,
+        username: DEFAULT_ADMIN.username,
+        passwordHash: hash,
+        passwordSalt: salt,
+        displayName: DEFAULT_ADMIN.displayName,
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing();
   }
 
   bootstrapped = true;

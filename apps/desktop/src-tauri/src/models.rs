@@ -1,5 +1,5 @@
 use diesel::{
-    sql_types::{BigInt, Integer, Nullable, Text},
+    sql_types::{BigInt, Bool, Double, Integer, Nullable, Text},
     QueryableByName,
 };
 use serde::{Deserialize, Serialize};
@@ -87,7 +87,8 @@ pub struct EventRow {
 #[serde(rename_all = "camelCase")]
 pub struct PaymentGroupMemberPayload {
     pub competitor_id: String,
-    pub price_override_cents: Option<i64>,
+    // Euros (despite the name), synced from the portal; may be fractional (e.g. 2.5).
+    pub price_override_cents: Option<f64>,
     #[serde(default)]
     pub compensated_events: Option<i64>,
     #[serde(default)]
@@ -100,7 +101,12 @@ pub struct PaymentGroupPayload {
     pub payment_group_id: String,
     pub name: String,
     pub color_hex: Option<String>,
-    pub global_price_override: Option<i64>,
+    // Euros, synced from the portal; may be fractional (e.g. 2.5).
+    pub global_price_override: Option<f64>,
+    // True for the dynamic "everyone who has competed before" group. Auto groups carry no
+    // overrides and never preselect the "other" payment method — only manual groups pay for members.
+    #[serde(default)]
+    pub auto_from_registrations: bool,
     #[serde(default)]
     pub sort_order: i32,
     pub competitor_ids: Vec<String>,
@@ -116,8 +122,10 @@ pub struct PaymentGroupRow {
     pub name: String,
     #[diesel(sql_type = Nullable<Text>)]
     pub color_hex: Option<String>,
-    #[diesel(sql_type = Nullable<BigInt>)]
-    pub global_price_override: Option<i64>,
+    #[diesel(sql_type = Nullable<Double>)]
+    pub global_price_override: Option<f64>,
+    #[diesel(sql_type = Bool)]
+    pub auto_from_registrations: bool,
     #[diesel(sql_type = Integer)]
     pub sort_order: i32,
 }
@@ -129,8 +137,8 @@ pub struct PaymentGroupMemberRow {
     pub payment_group_id: String,
     #[diesel(sql_type = Text)]
     pub competitor_id: String,
-    #[diesel(sql_type = Nullable<BigInt>)]
-    pub price_override_cents: Option<i64>,
+    #[diesel(sql_type = Nullable<Double>)]
+    pub price_override_cents: Option<f64>,
     #[diesel(sql_type = Nullable<BigInt>)]
     pub compensated_events: Option<i64>,
     #[diesel(sql_type = BigInt)]

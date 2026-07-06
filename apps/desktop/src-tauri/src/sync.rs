@@ -1,4 +1,4 @@
-use diesel::{prelude::*, sql_query, sql_types::{BigInt, Integer, Nullable, Text}};
+use diesel::{prelude::*, sql_query, sql_types::{BigInt, Bool, Double, Integer, Nullable, Text}};
 use log::{error, info, warn};
 use reqwest::header::{HeaderMap, HeaderValue, CONTENT_TYPE};
 use serde_json::json;
@@ -229,18 +229,19 @@ pub fn apply_cycle_response(
         sql_query("DELETE FROM payment_group_members").execute(connection)?;
         sql_query("DELETE FROM payment_groups").execute(connection)?;
         for group in &payload.payment_groups {
-            sql_query("INSERT INTO payment_groups(payment_group_id, name, color_hex, global_price_override, sort_order) VALUES (?, ?, ?, ?, ?)")
+            sql_query("INSERT INTO payment_groups(payment_group_id, name, color_hex, global_price_override, auto_from_registrations, sort_order) VALUES (?, ?, ?, ?, ?, ?)")
                 .bind::<Text, _>(&group.payment_group_id)
                 .bind::<Text, _>(&group.name)
                 .bind::<Nullable<Text>, _>(group.color_hex.as_deref())
-                .bind::<Nullable<BigInt>, _>(group.global_price_override)
+                .bind::<Nullable<Double>, _>(group.global_price_override)
+                .bind::<Bool, _>(group.auto_from_registrations)
                 .bind::<Integer, _>(group.sort_order)
                 .execute(connection)?;
             for competitor in &group.competitors {
                 sql_query("INSERT INTO payment_group_members(payment_group_id, competitor_id, price_override_cents, compensated_events, events_attended) VALUES (?, ?, ?, ?, ?)")
                     .bind::<Text, _>(&group.payment_group_id)
                     .bind::<Text, _>(&competitor.competitor_id)
-                    .bind::<Nullable<BigInt>, _>(competitor.price_override_cents)
+                    .bind::<Nullable<Double>, _>(competitor.price_override_cents)
                     .bind::<Nullable<BigInt>, _>(competitor.compensated_events)
                     .bind::<BigInt, _>(competitor.events_attended.unwrap_or(0))
                     .execute(connection)?;
@@ -650,6 +651,8 @@ mod tests {
                         course_id: "course-1".to_string(),
                         competition_group_name: "Open".to_string(),
                         price_cents: 1200,
+                        paid_price_cents: 1200,
+                        payment_method: "cash".to_string(),
                         created_at_device: "2026-03-08T10:01:00Z".to_string(),
                         local_seq: 1,
                     }],

@@ -105,6 +105,7 @@ async function loadPaymentGroupsSnapshot(client: DbLike): Promise<PaymentGroupsR
       name: group.name,
       colorHex: group.colorHex,
       globalPriceOverride: group.autoFromRegistrations ? null : moneyFromDb(group.globalPriceOverride),
+      autoFromRegistrations: group.autoFromRegistrations,
       sortOrder: group.sortOrder,
       competitorIds: group.autoFromRegistrations ? autoCompetitorIds : competitorIdsByGroup.get(group.paymentGroupId) ?? [],
       competitors: group.autoFromRegistrations

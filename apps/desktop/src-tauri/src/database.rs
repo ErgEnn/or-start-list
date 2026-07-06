@@ -105,6 +105,7 @@ pub fn init_schema(db: &mut SqliteConnection) -> Result<(), String> {
     ensure_column(db, "payment_groups", "global_price_override", "global_price_override INTEGER")?;
     let _ = sql_query("ALTER TABLE payment_groups RENAME COLUMN global_price_override_cents TO global_price_override").execute(db);
     ensure_column(db, "payment_groups", "sort_order", "sort_order INTEGER NOT NULL DEFAULT 0")?;
+    ensure_column(db, "payment_groups", "auto_from_registrations", "auto_from_registrations INTEGER NOT NULL DEFAULT 0")?;
     ensure_column(db, "payment_group_members", "price_override_cents", "price_override_cents INTEGER")?;
     ensure_column(db, "payment_group_members", "compensated_events", "compensated_events INTEGER")?;
     ensure_column(db, "payment_group_members", "events_attended", "events_attended INTEGER NOT NULL DEFAULT 0")?;
@@ -244,7 +245,7 @@ pub fn load_events(db: &mut SqliteConnection) -> Result<Vec<EventRow>, String> {
 
 pub fn load_payment_groups(db: &mut SqliteConnection) -> Result<Vec<PaymentGroupPayload>, String> {
     let groups = sql_query(
-        "SELECT payment_group_id, name, color_hex, global_price_override, sort_order \
+        "SELECT payment_group_id, name, color_hex, global_price_override, auto_from_registrations, sort_order \
          FROM payment_groups \
          ORDER BY sort_order DESC, name ASC, payment_group_id ASC",
     )
@@ -283,6 +284,7 @@ pub fn load_payment_groups(db: &mut SqliteConnection) -> Result<Vec<PaymentGroup
             name: group.name,
             color_hex: group.color_hex,
             global_price_override: group.global_price_override,
+            auto_from_registrations: group.auto_from_registrations,
             sort_order: group.sort_order,
             competitor_ids: competitor_ids_by_group
                 .remove(&group.payment_group_id)
@@ -699,9 +701,9 @@ fn find_effective_price(
                 continue;
             }
             if let Some(price) = member.price_override_cents {
-                candidates.push(price * 100);
+                candidates.push((price * 100.0).round() as i64);
             } else if let Some(global) = group.global_price_override {
-                candidates.push(global * 100);
+                candidates.push((global * 100.0).round() as i64);
             }
         }
     }
@@ -1795,7 +1797,8 @@ mod tests {
         sql_query("INSERT INTO payment_groups(payment_group_id, name, global_price_override) VALUES ('pg-1', 'Group', 9)")
             .execute(&mut db)
             .expect("insert payment group");
-        sql_query("INSERT INTO payment_group_members(payment_group_id, competitor_id, price_override_cents) VALUES ('pg-1', 'comp-1', 700)")
+        // Fractional €6.50 personal override (euros) takes precedence over the €9 group override.
+        sql_query("INSERT INTO payment_group_members(payment_group_id, competitor_id, price_override_cents) VALUES ('pg-1', 'comp-1', 6.5)")
             .execute(&mut db)
             .expect("insert payment member");
 
@@ -1806,6 +1809,8 @@ mod tests {
                 competitor_id: "comp-1".to_string(),
                 course_id: "course-1".to_string(),
                 competition_group_name: "N21".to_string(),
+                paid_price_cents: 650,
+                payment_method: "other(Group)".to_string(),
             },
         )
         .expect("create registration");
@@ -1813,7 +1818,107 @@ mod tests {
         assert_eq!(response.selected_courses_by_competitor.get("comp-1"), Some(&"course-1".to_string()));
         let rows = load_recent_registrations(&mut db, "event-1").expect("recent");
         assert_eq!(rows[0].competition_group_name, "N21");
-        assert_eq!(rows[0].price_cents, 700);
+        assert_eq!(rows[0].price_cents, 650);
+    }
+
+    fn n21_group() -> Vec<CompetitionGroupPayload> {
+        vec![CompetitionGroupPayload {
+            name: "N21".to_string(),
+            gender: Some("female".to_string()),
+            min_year: Some(2000),
+            max_year: Some(2005),
+            price_cents: 1200,
+        }]
+    }
+
+    #[test]
+    fn find_effective_price_handles_fractional_global_override() {
+        let payment_groups = vec![PaymentGroupPayload {
+            payment_group_id: "pg-1".to_string(),
+            name: "Group".to_string(),
+            color_hex: None,
+            global_price_override: Some(2.5),
+            auto_from_registrations: false,
+            sort_order: 0,
+            competitor_ids: vec!["comp-1".to_string()],
+            competitors: vec![PaymentGroupMemberPayload {
+                competitor_id: "comp-1".to_string(),
+                price_override_cents: None,
+                compensated_events: None,
+                events_attended: None,
+            }],
+        }];
+
+        // €2.50 fractional group override → 250 cents, below the €12 base.
+        let price = find_effective_price("comp-1", "N21", &n21_group(), &payment_groups);
+        assert_eq!(price, Some(250));
+    }
+
+    #[test]
+    fn find_effective_price_skips_group_when_compensation_exhausted() {
+        let payment_groups = vec![PaymentGroupPayload {
+            payment_group_id: "pg-1".to_string(),
+            name: "Group".to_string(),
+            color_hex: None,
+            global_price_override: Some(2.5),
+            auto_from_registrations: false,
+            sort_order: 0,
+            competitor_ids: vec!["comp-1".to_string()],
+            competitors: vec![PaymentGroupMemberPayload {
+                competitor_id: "comp-1".to_string(),
+                price_override_cents: None,
+                compensated_events: Some(3),
+                events_attended: Some(3),
+            }],
+        }];
+
+        // Cap reached (3 of 3) → override no longer applies, full base price.
+        let price = find_effective_price("comp-1", "N21", &n21_group(), &payment_groups);
+        assert_eq!(price, Some(1200));
+    }
+
+    #[test]
+    fn find_effective_price_takes_lowest_across_auto_and_manual_groups() {
+        // The reported bug: a competitor in the auto group (no override) AND a manual discount
+        // group must still get the manual override, regardless of group order.
+        let auto_group = PaymentGroupPayload {
+            payment_group_id: "auto".to_string(),
+            name: "Everyone".to_string(),
+            color_hex: None,
+            global_price_override: None,
+            auto_from_registrations: true,
+            sort_order: 10,
+            competitor_ids: vec!["comp-1".to_string()],
+            competitors: vec![PaymentGroupMemberPayload {
+                competitor_id: "comp-1".to_string(),
+                price_override_cents: None,
+                compensated_events: None,
+                events_attended: Some(4),
+            }],
+        };
+        let manual_group = PaymentGroupPayload {
+            payment_group_id: "manual".to_string(),
+            name: "Discount".to_string(),
+            color_hex: None,
+            global_price_override: Some(2.5),
+            auto_from_registrations: false,
+            sort_order: 0,
+            competitor_ids: vec!["comp-1".to_string()],
+            competitors: vec![PaymentGroupMemberPayload {
+                competitor_id: "comp-1".to_string(),
+                price_override_cents: None,
+                compensated_events: None,
+                events_attended: Some(0),
+            }],
+        };
+
+        // Auto group first in the list (higher sort_order) must not shadow the €2.50 discount.
+        let groups = vec![auto_group.clone(), manual_group.clone()];
+        assert_eq!(find_effective_price("comp-1", "N21", &n21_group(), &groups), Some(250));
+
+        // Order independence.
+        let groups = vec![manual_group, auto_group];
+        assert_eq!(find_effective_price("comp-1", "N21", &n21_group(), &groups), Some(250));
     }
 
     #[test]

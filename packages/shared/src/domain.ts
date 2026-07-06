@@ -48,7 +48,8 @@ export const pricingRuleSchema = z.object({
 
 export const paymentGroupMemberSchema = z.object({
   competitorId: z.string().min(1),
-  priceOverrideCents: z.number().int().nonnegative().nullable(),
+  // Euros (despite the name), e.g. 2.5 for a €2.50 fixed override. Matches globalPriceOverride's unit.
+  priceOverrideCents: z.number().nonnegative().nullable(),
   compensatedEvents: z.number().int().nonnegative().nullable().optional(),
   eventsAttended: z.number().int().nonnegative().optional(),
 });
@@ -76,6 +77,9 @@ export const paymentGroupSchema = z.object({
   name: z.string().min(1),
   colorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
   globalPriceOverride: z.number().nonnegative().nullable(),
+  // True for the dynamic "everyone who has competed before" group. Auto groups carry no price
+  // overrides and never preselect the "other" payment method — only manual groups pay for members.
+  autoFromRegistrations: z.boolean().default(false),
   sortOrder: z.number().int().default(0),
   competitorIds: z.array(z.string().min(1)),
   competitors: z.array(paymentGroupMemberSchema),
